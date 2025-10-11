@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+<div class="container mt-4">
+  <div class="row justify-content-center">
+    <div class="col-md-6 col-12 d-flex flex-column align-items-left">
+      <img src="{% static 'img/kettlebell.png' %}" alt="Kettlebell" class="img-fluid mb-3" style="max-width:600px;">
+    </div>
+    <div class="d-md-flex flex-md-row flex-column w-100 justify-content-center">
+      {% for kettlebell in kettlebells %}
+      <form method="post" class="m-2">
+        {% csrf_token %}
+        <input type="hidden" name="weight" value="{{ kettlebell.weight }}">
+        <button type="submit" class="btn btn-outline-dark w-100" {% if kettlebell.stock == 0 %}disabled{% endif %}>
+          {{ kettlebell.weight }} kg
+          {% if kettlebell.stock == 0 %}<span class="text-danger"> (Out of stock)</span>{% endif %}
+        </button>
+      </form>
+      {% endfor %}
+    </div>
+
+  </div>
+</div>
+{% endblock %}
