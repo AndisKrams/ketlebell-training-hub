@@ -7,19 +7,45 @@
     <div class="col-md-6 col-12 d-flex flex-column align-items-left">
       <img src="{% static 'img/kettlebell.png' %}" alt="Kettlebell" class="img-fluid mb-3" style="max-width:600px;">
     </div>
-    <div class="d-md-flex flex-md-row flex-column w-100 justify-content-center">
+    <div class="d-md-flex flex-md-row flex-column w-100 justify-content-center" id="kettlebell-buttons">
       {% for kettlebell in kettlebells %}
-      <form method="post" class="m-2">
-        {% csrf_token %}
-        <input type="hidden" name="weight" value="{{ kettlebell.weight }}">
-        <button type="submit" class="btn btn-outline-dark w-100" {% if kettlebell.stock == 0 %}disabled{% endif %}>
-          {{ kettlebell.weight }} kg
-          {% if kettlebell.stock == 0 %}<span class="text-danger"> (Out of stock)</span>{% endif %}
-        </button>
-      </form>
+      <button type="button"
+        class="btn w-100 m-2 kettlebell-btn {% if kettlebell.stock == 0 %}btn-secondary faded{% else %}btn-outline-dark{% endif %}"
+        data-weight="{{ kettlebell.weight }}"
+        data-price="{{ kettlebell.price_gbp }}"
+        data-stock="{{ kettlebell.stock }}"
+        data-bs-toggle="tooltip"
+        data-bs-html="true"
+        title="{% if kettlebell.stock > 0 %}Price: £{{ kettlebell.price_gbp }}<br>{{ kettlebell.stock }} in stock<br><input type='number' min='1' max='{{ kettlebell.stock }}' value='1' class='form-control form-control-sm' style='width:70px;display:inline;'> <button class='btn btn-sm btn-success'>Add to basket</button>{% else %}<span class='text-danger'>Out of stock</span>{% endif %}">
+        {{ kettlebell.weight }} kg
+        {% if kettlebell.stock == 0 %}<span class="text-danger"> (Out of stock)</span>{% endif %}
+      </button>
       {% endfor %}
     </div>
-
+    <div id="kettlebell-details" class="mt-4"></div>
   </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var buttons = document.querySelectorAll('.kettlebell-btn');
+  var details = document.getElementById('kettlebell-details');
+  buttons.forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      var weight = btn.getAttribute('data-weight');
+      var price = btn.getAttribute('data-price');
+      var stock = btn.getAttribute('data-stock');
+      if (stock > 0) {
+        details.innerHTML = `<div class='card p-3'><h5>${weight} kg</h5><p>Price: £${price}</p><p>${stock} in stock</p><form><input type='number' min='1' max='${stock}' value='1' class='form-control form-control-sm mb-2' style='width:100px;display:inline;'> <button class='btn btn-success'>Add to basket</button></form></div>`;
+      } else {
+        details.innerHTML = `<div class='card p-3'><h5>${weight} kg</h5><span class='text-danger'>Out of stock</span></div>`;
+      }
+    });
+  });
+  var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+  tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+    new bootstrap.Tooltip(tooltipTriggerEl);
+  });
+});
+</script>
 {% endblock %}
