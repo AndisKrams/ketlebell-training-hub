@@ -3,6 +3,8 @@
 
 {% block content %}
 <div class="container mt-4 mb-2">
+  <!-- Hidden form to render CSRF token into the page and ensure CSRF cookie is set for AJAX -->
+  <form style="display:none">{% csrf_token %}</form>
   <div class="row justify-content-center">
     <div class="col-12 col-md-6 d-flex flex-column align-items-center mb-3 mb-md-0">
       <img src="{% static 'img/kettlebell.png' %}" alt="Kettlebell" class="img-fluid">
@@ -38,7 +40,40 @@ document.addEventListener('DOMContentLoaded', function() {
       var price = btn.getAttribute('data-price');
       var stock = btn.getAttribute('data-stock');
       if (stock > 0) {
-        details.innerHTML = `<div class='card p-3'><h5>${weight} kg</h5><p>Price: £${price}</p><p>${stock} in stock</p><form><input type='number' min='1' max='${stock}' value='1' class='form-control form-control-sm mb-2' style='width:100px;display:inline;'> <button class='btn btn-success'>Add to basket</button></form></div>`;
+        details.innerHTML = `
+          <div class='card p-3'>
+            <h5>${weight} kg</h5>
+            <p>Price: £${price}</p>
+            <p>${stock} in stock</p>
+            <form class='add-to-basket-form' data-weight='${weight}'>
+              <input name='quantity' type='number' min='1' max='${stock}' value='1' class='form-control form-control-sm mb-2' style='width:100px;display:inline-block;margin-right:8px;'>
+              <button type='submit' class='btn btn-success'>Add to basket</button>
+            </form>
+          </div>`;
+        // attach submit handler
+        var form = details.querySelector('.add-to-basket-form');
+        form.addEventListener('submit', function(e) {
+          e.preventDefault();
+          var qty = form.querySelector("[name='quantity']").value;
+          fetch('{% url "add_to_basket" %}', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-CSRFToken': (function(){
+                return document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+              })(),
+            },
+            body: JSON.stringify({weight: weight, quantity: qty})
+          }).then(function(res){return res.json();}).then(function(data){
+            if (data.ok) {
+              details.innerHTML = `<div class='alert alert-success'>Added ${qty} x ${weight}kg to basket</div>`;
+            } else {
+              details.innerHTML = `<div class='alert alert-danger'>${data.error || 'Could not add to basket'}</div>`;
+            }
+          }).catch(function(){
+            details.innerHTML = `<div class='alert alert-danger'>Network error</div>`;
+          });
+        });
       } else {
         details.innerHTML = `<div class='card p-3'><h5>${weight} kg</h5><span class='text-danger'>Out of stock</span></div>`;
       }
