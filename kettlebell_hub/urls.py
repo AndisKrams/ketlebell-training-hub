@@ -22,4 +22,5 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('shop/', include('kettlebell_shop.urls')),
     path('accounts/', include('allauth.urls')),
+    path('basket/', include('basket.urls')),
 ]

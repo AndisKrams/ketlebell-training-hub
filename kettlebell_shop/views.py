@@ -3,6 +3,8 @@ from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse, HttpResponseBadRequest
 from django.views.decorators.http import require_POST
 from .models import Kettlebell
+from django.contrib.contenttypes.models import ContentType
+from basket.models import Basket, BasketItem
 
 
 def shop_view(request):
@@ -54,5 +56,23 @@ def add_to_basket(request):
     basket[key] = existing
     request.session['basket'] = basket
     request.session.modified = True
+
+    # If user is authenticated, persist into DB
+    if request.user.is_authenticated:
+        basket_obj, _ = Basket.objects.get_or_create(user=request.user)
+        ct = ContentType.objects.get_for_model(product)
+        item, created = BasketItem.objects.get_or_create(
+            basket=basket_obj,
+            content_type=ct,
+            object_id=product.id,
+            defaults={
+                'quantity': quantity,
+                'price_snapshot': product.price_gbp,
+            },
+        )
+        if not created:
+            item.quantity = item.quantity + quantity
+            item.price_snapshot = product.price_gbp
+            item.save()
 
     return JsonResponse({'ok': True, 'basket': basket})
