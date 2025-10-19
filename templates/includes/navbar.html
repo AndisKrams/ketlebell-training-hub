@@ -1,3 +1,65 @@
-<div class="collapse navbar-collapse" id="main-nav">
-    
-</div>
+<nav id="navbar" class="navbar navbar-expand-md container-fluid fixed-top" data-bs-theme="light">
+	<div class="col-6 col-md-5 ps-2">
+		<li class="nav-item">
+			<a href="{% url 'shop' %}" class="nav-link main-logo-link">
+				<h2 class="logo-font display-6 text-black my-0">Simply<strong> Kettlebells</strong></h2>
+			</a>
+		</li>
+	</div>
+	<div class="col-1 col-md-3">
+
+		<button class="navbar-toggler float-end" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+			aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+			<span class="navbar-toggler-icon"></span>
+		</button>
+		<div class="collapse navbar-collapse" id="navbarNav">
+			<ul class="navbar-nav dropdown-menu border-0 ms-auto">
+
+				<li class="nav-item">
+					<a class="nav-link" href="#">Forum</a>
+				</li>
+				<li class="nav-item">
+					<a class="nav-link" href="#">About</a>
+				</li>
+			</ul>
+		</div>
+
+	</div>	
+	<div class="col-5 col-md-4 my-auto ps-1">
+		<ul class="list-inline list-unstyled align-items-right my-0">
+			<li class="list-inline-item dropdown">
+				<a class="text-black nav-link" href="#" id="user-options" data-bs-toggle="dropdown"
+					aria-expanded="false" role="button">
+					<div class="text-center">
+						<div><i class="fas fa-user fa-md"></i></div>
+						<p class="my-0">My Account</p>
+					</div>
+				</a>
+				<ul class="dropdown-menu border-0" aria-labelledby="user-options">
+					{% if request.user.is_authenticated %}
+					<li><a href="#" class="dropdown-item">My Profile</a></li>
+					<li><a href="{% url 'account_logout' %}" class="dropdown-item">Logout</a></li>
+					{% else %}
+					<li><a href="{% url 'account_signup' %}" class="dropdown-item">Register</a></li>
+					<li><a href="{% url 'account_login' %}" class="dropdown-item">Login</a></li>
+					{% endif %}
+				</ul>
+			</li>
+			<li class="list-inline-item">
+				<a class="{% if grand_total %}text-info font-weight-bold{% else %}text-black{% endif %} nav-link"
+					href="">
+					<div class="text-center">
+						<div><i class="fas fa-shopping-bag fa-md"></i></div>
+						<p class="my-0">
+							{% if grand_total %}
+							£{{ grand_total|floatformat:2 }}
+							{% else %}
+							£0.00
+							{% endif %}
+						</p>
+					</div>
+				</a>
+			</li>
+		</ul>
+	</div>
+</nav>
