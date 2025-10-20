@@ -24,42 +24,43 @@
 			</ul>
 		</div>
 
-	</div>	
-	<div class="col-5 col-md-4 my-auto ps-1">
-		<ul class="list-inline list-unstyled align-items-right my-0">
-			<li class="list-inline-item dropdown">
-				<a class="text-black nav-link" href="#" id="user-options" data-bs-toggle="dropdown"
-					aria-expanded="false" role="button">
-					<div class="text-center">
-						<div><i class="fas fa-user fa-md"></i></div>
-						<p class="my-0">My Account</p>
-					</div>
-				</a>
-				<ul class="dropdown-menu border-0" aria-labelledby="user-options">
-					{% if request.user.is_authenticated %}
-					<li><a href="#" class="dropdown-item">My Profile</a></li>
-					<li><a href="{% url 'account_logout' %}" class="dropdown-item">Logout</a></li>
-					{% else %}
-					<li><a href="{% url 'account_signup' %}" class="dropdown-item">Register</a></li>
-					<li><a href="{% url 'account_login' %}" class="dropdown-item">Login</a></li>
-					{% endif %}
-				</ul>
-			</li>
-			<li class="list-inline-item">
-				<button id="open-basket" class="btn btn-link p-0 nav-link" type="button"
-					data-bs-toggle="modal" data-bs-target="#basketModal" aria-label="Open basket">
-					<div class="text-center">
-						<div><i class="fas fa-shopping-bag fa-md"></i><span id="basket-count" class="badge bg-secondary rounded-pill" style="position:relative;top:-8px;left:6px;">0</span></div>
-						<p class="my-0">
-							{% if grand_total %}
-							£{{ grand_total|floatformat:2 }}
-							{% else %}
-							£0.00
-							{% endif %}
-						</p>
-					</div>
-				</button>
-			</li>
-		</ul>
+	</div>
+	<div class="col-5 col-md-4 justify-content-evenly my-auto ps-1">
+		{% if request.user.is_authenticated %}
+		<li class="list-inline-item dropdown">
+			<a class="text-black nav-link" href="#" id="user-options" data-bs-toggle="dropdown" aria-expanded="false"
+				role="button">
+				<div class="text-center">
+					<div><i class="fas fa-user fa-md"></i></div>
+					<p class="my-0">My Account</p>
+				</div>
+			</a>
+			<ul class="dropdown-menu border-0" aria-labelledby="user-options">
+				<li><a href="#" class="dropdown-item nav-link">My Profile</a></li>
+				<li><a href="{% url 'account_logout' %}" class="dropdown-item">Logout</a></li>
+			</ul>
+		</li>
+		{% else %}
+		<button class="btn-secondary" href="{% url 'account_signup' %}" class="nav-link">Register</button>
+		<button class="btn-secondary" href="{% url 'account_login' %}" class="nav-link">Login</button>
+		{% endif %}
+
+		<li class="list-inline-item">
+			<button id="open-basket" class="btn btn-link p-0 nav-link" type="button" data-bs-toggle="modal"
+				data-bs-target="#basketModal" aria-label="Open basket">
+				<div class="text-center">
+					<div><i class="fas fa-shopping-bag fa-md"></i><span id="basket-count"
+							class="badge bg-secondary rounded-pill"
+							style="position:relative;top:-8px;left:6px;">0</span></div>
+					<p class="my-0">
+						{% if grand_total %}
+						£{{ grand_total|floatformat:2 }}
+						{% else %}
+						£0.00
+						{% endif %}
+					</p>
+				</div>
+			</button>
+		</li>
 	</div>
 </nav>
