@@ -1,0 +1,265 @@
+{% load static %}
+<!-- Basket modal partial -->
+<div class="modal fade" id="basketModal" tabindex="-1" aria-labelledby="basketModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-end">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="basketModalLabel">Your Basket</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div id="basket-contents">
+                    <p class="text-muted">Loading...</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="update-all" class="btn btn-outline-primary">Update</button>
+                <button id="empty-basket" class="btn btn-danger">Empty basket</button>
+                <a href="/checkout/" id="go-to-checkout" class="btn btn-primary">Go to Checkout</a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Continue shopping</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    (function () {
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        const basketModal = document.getElementById('basketModal');
+        if (!basketModal) return;
+
+        basketModal.addEventListener('show.bs.modal', function (event) {
+            fetchContents();
+        });
+
+        function fetchContents() {
+            fetch('{% url "basket:api_contents" %}')
+                .then(r => r.json())
+                .then(renderContents)
+                .catch(err => {
+                    document.getElementById('basket-contents').innerHTML = '<p class="text-danger">Unable to load basket</p>';
+                    console.error(err);
+                });
+        }
+
+        function renderContents(data) {
+            const container = document.getElementById('basket-contents');
+            if (!data.items || data.items.length === 0) {
+                container.innerHTML = '<p>Your basket is empty.</p>';
+                return;
+            }
+            let html = '<div class="list-group">';
+            data.items.forEach(it => {
+                const idAttr = it.id ? 'data-item-id="' + it.id + '"' : (it.weight ? 'data-weight="' + it.weight + '"' : '');
+                const maxAttr = (it.stock !== null && it.stock !== undefined) ? ('max="' + it.stock + '"') : '';
+                const stockLine = (it.stock !== null && it.stock !== undefined) ? ('<div class="text-muted">' + it.stock + ' in stock</div>') : '';
+                html += `<div class="list-group-item d-flex justify-content-between align-items-center" ${idAttr}>
+                    <div>
+                        <div><strong>${it.label}</strong></div>
+                        <div class="text-muted">£${it.price.toFixed(2)} each</div>
+                        ${stockLine}
+                    </div>
+                    <div class="text-end">
+                        <div class="mb-2">£${it.subtotal.toFixed(2)}</div>
+                                <div class="input-group input-group-sm">
+                                    <input type="number" min="1" ${maxAttr} class="form-control quantity-input" value="${it.quantity}" style="width:90px;">
+                                    <button class="btn btn-danger btn-sm remove-item">Remove</button>
+                                </div>
+                    </div>
+                </div>`;
+            });
+            html += '</div>';
+            html += `<div class="mt-3 d-flex justify-content-between"><strong>Total</strong><strong>£${data.grand_total.toFixed(2)}</strong></div>`;
+            container.innerHTML = html;
+
+            container.querySelectorAll('.remove-item').forEach(btn => btn.addEventListener('click', onRemove));
+            // update badge and header total if provided
+            if (data && data.grand_total !== undefined) {
+                const totalEl = document.querySelector('#open-basket p');
+                if (totalEl) totalEl.textContent = '£' + data.grand_total.toFixed(2);
+            }
+            if (data && data.count !== undefined) {
+                const badge = document.getElementById('basket-count');
+                if (badge) badge.textContent = data.count;
+            }
+        }
+
+        function onUpdate(e) {
+            const row = e.target.closest('[data-item-id]') || e.target.closest('.list-group-item');
+            const input = row.querySelector('.quantity-input');
+            const qty = parseInt(input.value || '0', 10);
+            const itemId = row.getAttribute('data-item-id');
+            const weight = row.getAttribute('data-weight');
+            const payload = itemId ? { item_id: itemId, quantity: qty } : { weight: weight, quantity: qty };
+            postUpdate(payload);
+        }
+
+        function onRemove(e) {
+            const row = e.target.closest('[data-item-id]') || e.target.closest('.list-group-item');
+            const itemId = row.getAttribute('data-item-id');
+            const weight = row.getAttribute('data-weight');
+            const payload = itemId ? { item_id: itemId, quantity: 0 } : { weight: weight, quantity: 0 };
+            postUpdate(payload);
+        }
+
+        function showError(message) {
+            const container = document.getElementById('basket-contents');
+            const el = document.createElement('div');
+            el.className = 'alert alert-danger';
+            el.textContent = message;
+            container.prepend(el);
+            setTimeout(() => el.remove(), 5000);
+        }
+
+        function showSuccess(message) {
+            const container = document.getElementById('basket-contents');
+            const el = document.createElement('div');
+            el.className = 'alert alert-success';
+            el.textContent = message;
+            container.prepend(el);
+            setTimeout(() => el.remove(), 5000);
+        }
+
+        function postUpdate(payload) {
+            // keep a stringified copy for downstream event inference
+            const payloadToString = JSON.stringify(payload || {});
+            // Return a promise so callers can await completion
+            return fetch('{% url "basket:api_update" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: JSON.stringify(payload),
+            }).then(r => {
+                return r.json().then(body => ({ ok: r.ok, body }));
+            }).then(({ ok, body }) => {
+                if (!ok) {
+                    const msg = body && body.error ? body.error : 'Update failed';
+                    showError(msg);
+                    return Promise.reject(new Error(msg));
+                }
+                    renderContents(body);
+                    // Dispatch a global event so other pages can react to basket changes
+                    try {
+                        // attempt to infer the action type from the request body
+                        let action = 'updated';
+                        try {
+                            const payloadObj = JSON.parse(payloadToString || '{}');
+                            if (payloadObj && Number(payloadObj.quantity) === 0) action = 'removed';
+                        } catch (e) {
+                            // payloadToString may not be set; fall back to 'updated'
+                        }
+                        const ev = new CustomEvent('basket:updated', { detail: { action: action, count: body.count, grand_total: body.grand_total } });
+                        window.dispatchEvent(ev);
+                    } catch (e) {
+                        // ignore if CustomEvent fails in older browsers
+                    }
+                // Update navbar count/total too
+                if (body && body.grand_total !== undefined) {
+                    const totalEl = document.querySelector('#open-basket p');
+                    if (totalEl) totalEl.textContent = '£' + body.grand_total.toFixed(2);
+                }
+                if (body && body.count !== undefined) {
+                    const badge = document.getElementById('basket-count');
+                    if (badge) badge.textContent = body.count;
+                }
+                return body;
+            }).catch(err => {
+                console.error(err);
+                showError('Network error');
+                return Promise.reject(err);
+            });
+        }
+
+        // Update all button: iterate inputs and send bulk update payloads
+        const updateAllBtn = document.getElementById('update-all');
+        if (updateAllBtn) {
+            updateAllBtn.addEventListener('click', function () {
+                const rows = document.querySelectorAll('#basket-contents .list-group-item');
+                const updates = [];
+                rows.forEach(row => {
+                    const input = row.querySelector('.quantity-input');
+                    const qty = parseInt(input.value || '0', 10);
+                    const itemId = row.getAttribute('data-item-id');
+                    const weight = row.getAttribute('data-weight');
+                    const payload = itemId ? { item_id: itemId, quantity: qty } : { weight: weight, quantity: qty };
+                    updates.push(payload);
+                });
+                // send updates sequentially to preserve server-side checks
+                (async function () {
+                    for (const p of updates) {
+                        // eslint-disable-next-line no-await-in-loop
+                        try {
+                            await postUpdate(p);
+                        } catch (e) {
+                            // stop further updates on error
+                            break;
+                        }
+                    }
+                })();
+            });
+        }
+
+        // Empty basket button
+        const emptyBtn = document.getElementById('empty-basket');
+        if (emptyBtn) {
+            emptyBtn.addEventListener('click', function () {
+                // send remove (quantity 0) for all items sequentially,
+                // then show a success message and update header counts
+                const rows = Array.from(document.querySelectorAll('#basket-contents .list-group-item'));
+                (async function () {
+                    // If there are no rows, still call clear endpoint to be idempotent
+                    try {
+                        const resp = await fetch('{% url "basket:api_clear" %}', {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRFToken': getCookie('csrftoken'),
+                                'Content-Type': 'application/json'
+                            }
+                        });
+                        if (resp.ok) {
+                            const body = await resp.json();
+                            // show toast and dispatch detailed event
+                            try { window.showGlobalToast('Basket emptied', 'success'); } catch (e) {}
+                            try {
+                                const ev = new CustomEvent('basket:updated', { detail: { action: 'cleared', count: body.count, grand_total: body.grand_total } });
+                                window.dispatchEvent(ev);
+                            } catch (e) {}
+
+                            const container = document.getElementById('basket-contents');
+                            container.innerHTML = '<p>Your basket is empty.</p>';
+                            const totalEl = document.querySelector('#open-basket p');
+                            if (totalEl) totalEl.textContent = '£0.00';
+                            const badge = document.getElementById('basket-count');
+                            if (badge) badge.textContent = '0';
+
+                            // hide modal shortly after
+                            setTimeout(() => {
+                                try { const bsModal = bootstrap.Modal.getInstance(basketModal) || new bootstrap.Modal(basketModal); bsModal.hide(); } catch (e) {}
+                            }, 900);
+                        } else {
+                            showError('Could not empty basket');
+                        }
+                    } catch (e) {
+                        showError('Network error');
+                    }
+                })();
+            });
+        }
+    })();
+</script>

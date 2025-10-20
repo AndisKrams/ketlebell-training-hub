@@ -46,10 +46,10 @@
 				</ul>
 			</li>
 			<li class="list-inline-item">
-				<a class="{% if grand_total %}text-info font-weight-bold{% else %}text-black{% endif %} nav-link"
-					href="">
+				<button id="open-basket" class="btn btn-link p-0 nav-link" type="button"
+					data-bs-toggle="modal" data-bs-target="#basketModal" aria-label="Open basket">
 					<div class="text-center">
-						<div><i class="fas fa-shopping-bag fa-md"></i></div>
+						<div><i class="fas fa-shopping-bag fa-md"></i><span id="basket-count" class="badge bg-secondary rounded-pill" style="position:relative;top:-8px;left:6px;">0</span></div>
 						<p class="my-0">
 							{% if grand_total %}
 							£{{ grand_total|floatformat:2 }}
@@ -58,7 +58,7 @@
 							{% endif %}
 						</p>
 					</div>
-				</a>
+				</button>
 			</li>
 		</ul>
 	</div>

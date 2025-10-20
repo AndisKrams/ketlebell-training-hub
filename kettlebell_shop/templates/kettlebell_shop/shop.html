@@ -54,19 +54,49 @@ document.addEventListener('DOMContentLoaded', function() {
         var form = details.querySelector('.add-to-basket-form');
         form.addEventListener('submit', function(e) {
           e.preventDefault();
-          var qty = form.querySelector("[name='quantity']").value;
+          var qty = parseInt(form.querySelector("[name='quantity']").value || '0', 10);
+          var csrftoken = (function(){
+            return document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+          })();
           fetch('{% url "add_to_basket" %}', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              'X-CSRFToken': (function(){
-                return document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
-              })(),
+              'X-CSRFToken': csrftoken,
             },
             body: JSON.stringify({weight: weight, quantity: qty})
           }).then(function(res){return res.json();}).then(function(data){
             if (data.ok) {
-              details.innerHTML = `<div class='alert alert-success'>Added ${qty} x ${weight}kg to basket</div>`;
+              try { window.showGlobalToast(`Added ${qty} x ${weight}kg to basket`, 'success'); } catch (e) {}
+              // clear the details area after showing toast to avoid stale inline messages
+              details.innerHTML = '';
+              // update the original button's data-stock and tooltip
+              var btn = document.querySelector('.kettlebell-btn[data-weight="' + weight + '"]');
+              if (btn && data.remaining_stock !== undefined) {
+                btn.setAttribute('data-stock', String(data.remaining_stock));
+                // update tooltip title if tooltip exists
+                try {
+                  const tip = bootstrap.Tooltip.getInstance(btn);
+                  if (tip) {
+                    const title = btn.getAttribute('title') || '';
+                    // replace the stock number in title if present, fallback to rebuild
+                    const newTitle = title.replace(/\d+ in stock/, data.remaining_stock + ' in stock');
+                    btn.setAttribute('title', newTitle);
+                    tip.setContent({'.tooltip-inner': newTitle});
+                  }
+                } catch (e) {
+                  // ignore tooltip update errors
+                }
+              }
+              // update header totals if provided
+              if (data.grand_total !== undefined) {
+                const totalEl = document.querySelector('#open-basket p');
+                if (totalEl) totalEl.textContent = '£' + Number(data.grand_total).toFixed(2);
+              }
+              if (data.count !== undefined) {
+                const badge = document.getElementById('basket-count');
+                if (badge) badge.textContent = data.count;
+              }
             } else {
               details.innerHTML = `<div class='alert alert-danger'>${data.error || 'Could not add to basket'}</div>`;
             }
@@ -82,6 +112,40 @@ document.addEventListener('DOMContentLoaded', function() {
   var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
   tooltipTriggerList.forEach(function (tooltipTriggerEl) {
     new bootstrap.Tooltip(tooltipTriggerEl);
+  });
+  // initialize header totals and badge
+  (function(){
+    fetch('{% url "basket:api_contents" %}')
+      .then(r => r.json())
+      .then(function(data){
+        if (data && data.grand_total !== undefined) {
+          const totalEl = document.querySelector('#open-basket p');
+          if (totalEl) totalEl.textContent = '£' + data.grand_total.toFixed(2);
+        }
+        if (data && data.count !== undefined) {
+          const badge = document.getElementById('basket-count');
+          if (badge) badge.textContent = data.count;
+        }
+      }).catch(()=>{});
+  })();
+  // Clear the per-item add message when the basket updates elsewhere
+  window.addEventListener('basket:updated', function(e) {
+    try {
+      const details = document.getElementById('kettlebell-details');
+      const action = e && e.detail && e.detail.action ? e.detail.action : 'updated';
+      // Remove per-item success message on remove/updated
+      if (details) {
+        const alert = details.querySelector('.alert.alert-success');
+        if (alert && (action === 'removed' || action === 'updated')) alert.remove();
+      }
+      // If the basket was cleared, fully clear details and show a global toast (if toast helper exists)
+      if (action === 'cleared') {
+        if (details) details.innerHTML = '';
+        try { window.showGlobalToast('Basket emptied', 'success'); } catch (e) {}
+      }
+    } catch (err) {
+      // ignore
+    }
   });
 });
 </script>

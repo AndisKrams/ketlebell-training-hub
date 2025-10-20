@@ -44,6 +44,40 @@
         {% endblock %}
     </main>
 
+    {% include 'basket/modal.html' %}
+
+    <!-- Global toast container -->
+    <div aria-live="polite" aria-atomic="true" class="position-fixed top-0 end-0 p-3" style="z-index: 1080;">
+        <div id="global-toasts"></div>
+    </div>
+
+    <script>
+    // Helper to show a bootstrap toast with a short message
+    window.showGlobalToast = function(message, type='success', timeout=4000) {
+        try {
+            const container = document.getElementById('global-toasts');
+            if (!container) return;
+            const toastId = 'toast-' + Date.now();
+            const toastHtml = `
+                <div id="${toastId}" class="toast align-items-center text-bg-${type} border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true">
+                  <div class="d-flex">
+                    <div class="toast-body">${message}</div>
+                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                  </div>
+                </div>`;
+            const wrapper = document.createElement('div');
+            wrapper.innerHTML = toastHtml;
+            const node = wrapper.firstElementChild;
+            container.appendChild(node);
+            const bsToast = new bootstrap.Toast(node, { delay: timeout });
+            bsToast.show();
+            node.addEventListener('hidden.bs.toast', function () { node.remove(); });
+        } catch (e) {
+            console.error('showGlobalToast error', e);
+        }
+    };
+    </script>
+
 </body>
 
 </html>
