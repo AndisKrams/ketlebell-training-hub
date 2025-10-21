@@ -15,12 +15,13 @@
       <button type="button"
         class="kettlebell-btn btn m-0 p-2 {% if kettlebell.stock == 0 %}btn-secondary faded{% else %}btn-outline-dark{% endif %}"
         data-weight="{{ kettlebell.weight }}"
+        data-weight-unit="{{ kettlebell.weight_unit }}"
         data-price="{{ kettlebell.price_gbp }}"
         data-stock="{{ kettlebell.stock }}"
         data-bs-toggle="tooltip"
         data-bs-html="true"
         title="{% if kettlebell.stock > 0 %}Price: £{{ kettlebell.price_gbp }}<br>{{ kettlebell.stock }} in stock<br><input type='number' min='1' max='{{ kettlebell.stock }}' value='1' class='form-control form-control-sm' style='width:70px;display:inline;'> <button class='btn btn-sm btn-secondary'>Add to basket</button>{% else %}<span class='text-danger'>Out of stock</span>{% endif %}">
-        {{ kettlebell.weight }} kg
+  {{ kettlebell.weight }} {{ kettlebell.weight_unit }}
         {% if kettlebell.stock == 0 %}<span class="text-danger"> (Out of stock)</span>{% endif %}
       </button>
       {% endfor %}
@@ -42,10 +43,10 @@ document.addEventListener('DOMContentLoaded', function() {
       if (stock > 0) {
         details.innerHTML = `
           <div class='card p-3'>
-            <h5>${weight} kg</h5>
+            <h5>${weight} ${btn.getAttribute("data-weight-unit") || "kg"}</h5>
             <p>Price: £${price}</p>
             <p>${stock} in stock</p>
-            <form class='add-to-basket-form' data-weight='${weight}'>
+        <form class='add-to-basket-form' data-weight='${weight}' data-weight-unit='${btn.getAttribute("data-weight-unit") || "kg"}'>
               <input name='quantity' type='number' min='1' max='${stock}' value='1' class='form-control form-control-sm mb-2' style='width:100px;display:inline-block;margin-right:8px;'>
               <button type='submit' class='btn btn-success'>Add to basket</button>
             </form>
@@ -58,20 +59,21 @@ document.addEventListener('DOMContentLoaded', function() {
           var csrftoken = (function(){
             return document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
           })();
+          var unit = form.getAttribute('data-weight-unit') || 'kg';
           fetch('{% url "add_to_basket" %}', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
               'X-CSRFToken': csrftoken,
             },
-            body: JSON.stringify({weight: weight, quantity: qty})
+            body: JSON.stringify({weight: String(weight), unit: unit, quantity: qty})
           }).then(function(res){return res.json();}).then(function(data){
             if (data.ok) {
-              try { window.showGlobalToast(`Added ${qty} x ${weight}kg to basket`, 'success'); } catch (e) {}
+              try { window.showGlobalToast(`Added ${qty} x ${weight} ${unit} to basket`, 'success'); } catch (e) {}
               // clear the details area after showing toast to avoid stale inline messages
               details.innerHTML = '';
               // update the original button's data-stock and tooltip
-              var btn = document.querySelector('.kettlebell-btn[data-weight="' + weight + '"]');
+              var btn = document.querySelector('.kettlebell-btn[data-weight="' + weight + '"][data-weight-unit="' + unit + '"]');
               if (btn && data.remaining_stock !== undefined) {
                 btn.setAttribute('data-stock', String(data.remaining_stock));
                 // update tooltip title if tooltip exists
@@ -105,7 +107,7 @@ document.addEventListener('DOMContentLoaded', function() {
           });
         });
       } else {
-        details.innerHTML = `<div class='card p-3'><h5>${weight} kg</h5><span class='text-danger'>Out of stock</span></div>`;
+  details.innerHTML = `<div class='card p-3'><h5>${weight} ${btn.getAttribute("data-weight-unit") || "kg"}</h5><span class='text-danger'>Out of stock</span></div>`;
       }
     });
   });

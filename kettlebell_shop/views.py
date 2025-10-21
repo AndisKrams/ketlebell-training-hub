@@ -26,9 +26,16 @@ def add_to_basket(request):
     """
     try:
         import json
+        from decimal import Decimal, InvalidOperation
 
         data = json.loads(request.body)
-        weight = int(data.get('weight'))
+        weight_raw = data.get('weight')
+        unit = data.get('unit', 'kg')
+        try:
+            weight = Decimal(str(weight_raw))
+        except (InvalidOperation, TypeError):
+            return HttpResponseBadRequest('Invalid weight')
+
         quantity = int(data.get('quantity'))
     except Exception:
         return HttpResponseBadRequest('Invalid payload')
@@ -38,9 +45,15 @@ def add_to_basket(request):
             {'ok': False, 'error': 'Quantity must be at least 1'}
         )
 
+    # Normalize a key for session storage (strip trailing zeros)
+    weight_str = str(weight)
+    if '.' in weight_str:
+        weight_key = weight_str.rstrip('0').rstrip('.')
+    else:
+        weight_key = weight_str
     # Existing amount in session (anonymous side)
     basket = request.session.get('basket', {})
-    key = str(weight)
+    key = weight_key
     existing_session_qty = int(basket.get(key, {}).get('quantity', 0))
 
     # If authenticated, use a DB transaction + select_for_update to avoid
@@ -52,8 +65,11 @@ def add_to_basket(request):
         try:
             with transaction.atomic():
                 # lock the product row to get latest stock
+                # look up by numeric weight and unit
                 product = (
-                    Kettlebell.objects.select_for_update().get(weight=weight)
+                    Kettlebell.objects.select_for_update().get(
+                        weight=weight, weight_unit=unit
+                    )
                 )
 
                 basket_obj, _ = (
@@ -146,7 +162,9 @@ def add_to_basket(request):
         )
 
     # Anonymous (session-backed) flow: re-fetch product to ensure latest stock
-    product = get_object_or_404(Kettlebell, weight=weight)
+    product = get_object_or_404(
+        Kettlebell, weight=weight, weight_unit=unit
+    )
     existing_db_qty = 0
     total_after = existing_session_qty + existing_db_qty + quantity
     if total_after > product.stock:

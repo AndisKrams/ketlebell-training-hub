@@ -5,6 +5,7 @@ from .models import Basket, BasketItem
 from django.views.decorators.http import require_POST
 import json
 from kettlebell_shop.models import Kettlebell
+from decimal import Decimal, InvalidOperation
 
 
 def _session_basket_to_list(session_basket):
@@ -110,9 +111,12 @@ def basket_contents_api(request):
             subtotal = price * qty
             # attempt to find product by weight to expose stock
             try:
-                kb = Kettlebell.objects.get(weight=int(weight_str))
+                # session weights were historically stored as integers (kg).
+                # Assume kg when looking up by legacy session key
+                w = Decimal(str(weight_str))
+                kb = Kettlebell.objects.get(weight=w, weight_unit='kg')
                 stock = kb.stock
-            except Exception:
+            except (Kettlebell.DoesNotExist, InvalidOperation, Exception):
                 stock = None
 
             items.append(
@@ -201,11 +205,12 @@ def basket_update_api(request):
         session_basket = request.session.get('basket', {})
         if not weight or weight not in session_basket:
             return JsonResponse({'error': 'not found'}, status=404)
-    # Validate stock for anonymous items by looking up the kettlebell
+    # Validate stock for anonymous users by looking up the kettlebell
     # by weight
         try:
-            kb = Kettlebell.objects.get(weight=int(weight))
-        except Kettlebell.DoesNotExist:
+            w = Decimal(str(weight))
+            kb = Kettlebell.objects.get(weight=w, weight_unit='kg')
+        except (Kettlebell.DoesNotExist, InvalidOperation):
             kb = None
 
         if qty <= 0:
