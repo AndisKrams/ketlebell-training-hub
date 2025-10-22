@@ -23,15 +23,20 @@ class UserProfileForm(forms.ModelForm):
 
         # Set autofocus and placeholders, and unify classes
         if 'default_phone_number' in self.fields:
-            self.fields['default_phone_number'].widget.attrs['autofocus'] = True
+            self.fields['default_phone_number'].widget.attrs[
+                'autofocus'
+            ] = True
 
+        cls = 'border-black rounded-0 profile-form-input'
         for field_name, field in self.fields.items():
             if field_name != 'default_country':
+                base = placeholders.get(field_name, field.label)
                 if field.required:
-                    placeholder = f"{placeholders.get(field_name, field.label)} *"
+                    placeholder = base + ' '
+                    placeholder += '*'
                 else:
-                    placeholder = placeholders.get(field_name, field.label)
+                    placeholder = base
                 field.widget.attrs['placeholder'] = placeholder
 
-            field.widget.attrs['class'] = 'border-black rounded-0 profile-form-input'
+            field.widget.attrs['class'] = cls
             field.label = False

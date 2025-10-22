@@ -23,4 +23,5 @@ urlpatterns = [
     path('shop/', include('kettlebell_shop.urls')),
     path('accounts/', include('allauth.urls')),
     path('basket/', include('basket.urls')),
+    path('profiles/', include('profiles.urls')),
 ]
