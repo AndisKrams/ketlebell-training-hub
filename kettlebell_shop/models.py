@@ -8,7 +8,6 @@ class Kettlebell(models.Model):
     weight: numeric weight value. Stored in the unit specified by
     `weight_unit`.
     weight_unit: 'kg' or 'lb'.
-    (previously supported an image file; removed)
     """
     # Preserve the original presets as choices for admin convenience
     WEIGHT_CHOICES = [
@@ -50,10 +49,9 @@ class Kettlebell(models.Model):
         unique_together = (('weight', 'weight_unit'),)
 
     def __str__(self):
-        return (
-            f"{self.weight} {self.weight_unit} ("
-            f"£{self.price_gbp}, {self.stock} in stock)"
-        )
+        # Do not include stock availability in the display string; the
+        # checkout/order summary should not expose live stock counts.
+        return f"{self.weight} {self.weight_unit} (£{self.price_gbp})"
 
     def save(self, *args, **kwargs):
         # If a preset was selected, use it to set the numeric weight and unit
