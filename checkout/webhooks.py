@@ -1,7 +1,7 @@
 from django.http import HttpResponse
 
 
-def webhook_stub(request):
+def webhook(request):
     """A placeholder webhook endpoint for payment provider callbacks.
 
     This currently accepts any request and returns 200. Replace with
