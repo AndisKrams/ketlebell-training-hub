@@ -17,9 +17,7 @@ def checkout(request):
 
     This implementation expects a server-side basket retrieval.
     """
-    # For this minimal implementation don't integrate Stripe;
-    # just create an Order from posted form data and redirect to
-    # success.
+
     if request.method == 'POST':
         form = OrderForm(request.POST)
         if form.is_valid():
@@ -109,7 +107,61 @@ def checkout(request):
     else:
         form = OrderForm()
 
-    return render(request, 'checkout/checkout.html', {'form': form})
+    # Build an order summary (for display beside the form)
+    summary_items = []
+    summary_total = Decimal('0.00')
+    if request.user.is_authenticated:
+        basket_obj, _ = Basket.objects.get_or_create(user=request.user)
+        for it in basket_obj.items.select_related('content_type'):
+            qty = int(it.quantity)
+            price = Decimal(it.price_snapshot)
+            subtotal = price * qty
+            summary_items.append(
+                {
+                    'name': str(it.content_object),
+                    'quantity': qty,
+                    'unit_price': price,
+                    'subtotal': subtotal,
+                }
+            )
+            summary_total += subtotal
+    else:
+        session_basket = request.session.get('basket', {})
+        for weight_str, data in (session_basket or {}).items():
+            qty = int(data.get('quantity', 0))
+            try:
+                price = Decimal(str(data.get('price_gbp', '0')))
+            except InvalidOperation:
+                price = Decimal('0.00')
+            subtotal = price * qty
+            # try to find product label
+            label = f"{weight_str} kg kettlebell"
+            try:
+                w = Decimal(str(weight_str))
+                kb = Kettlebell.objects.filter(
+                    weight=w, weight_unit='kg'
+                ).first()
+                if kb:
+                    label = str(kb)
+            except Exception:
+                pass
+
+            summary_items.append(
+                {
+                    'name': label,
+                    'quantity': qty,
+                    'unit_price': price,
+                    'subtotal': subtotal,
+                }
+            )
+            summary_total += subtotal
+
+    context = {
+        'form': form,
+        'summary_items': summary_items,
+        'summary_total': summary_total,
+    }
+    return render(request, 'checkout/checkout.html', context)
 
 
 def checkout_success(request, order_number):
