@@ -1,4 +1,5 @@
 from decimal import Decimal
+import json
 
 from django.test import TestCase, Client
 from django.urls import reverse
@@ -24,7 +25,9 @@ class CheckoutTests(TestCase):
     def test_anonymous_checkout_creates_order_and_clears_session(self):
         # prepare session basket
         session = self.client.session
-        session["basket"] = {"16": {"quantity": 2, "price_gbp": str(self.kb.price_gbp)}}
+        session["basket"] = {
+            "16": {"quantity": 2, "price_gbp": str(self.kb.price_gbp)}
+        }
         session.save()
 
         url = reverse("checkout:checkout")
@@ -91,3 +94,57 @@ class CheckoutTests(TestCase):
 
         # DB basket cleared
         self.assertEqual(basket_obj.items.count(), 0)
+
+    def test_cache_checkout_data_stores_json_and_returns_ok(self):
+        url = reverse('checkout:cache_checkout_data')
+        payload = {'foo': 'bar', 'amount': 123}
+        resp = self.client.post(
+            url, data=json.dumps(payload), content_type='application/json'
+        )
+        # view returns small OK response (plain text)
+        self.assertEqual(resp.status_code, 200)
+        # session should contain the cached payload
+        self.assertIn('checkout_cache', self.client.session)
+        self.assertEqual(self.client.session['checkout_cache'], payload)
+
+    def test_cache_checkout_data_invalid_returns_fail(self):
+        url = reverse('checkout:cache_checkout_data')
+        # send invalid JSON (text)
+        resp = self.client.post(
+            url, data='not-json', content_type='application/json'
+        )
+        # view renders FAIL small template, still 200
+        self.assertEqual(resp.status_code, 200)
+
+    def test_authenticated_checkout_links_profile(self):
+        # ensure that when a user with a profile checks out, order.profile
+        # is set
+        user = User.objects.create_user('profiled', 'p@example.com', 'pw')
+        # create profile via signal
+        # ensure basket
+        basket_obj = Basket.objects.create(user=user)
+        BasketItem.objects.create(
+            basket=basket_obj,
+            content_object=self.kb,
+            quantity=1,
+            price_snapshot=self.kb.price_gbp,
+        )
+        self.client.login(username='profiled', password='pw')
+        url = reverse('checkout:checkout')
+        data = {
+            'full_name': 'Profiled',
+            'email': 'p@example.com',
+            'phone_number': '1',
+            'country': 'UK',
+            'postcode': 'PP1',
+            'town_or_city': 'City',
+            'street_address1': 'Addr',
+            'street_address2': '',
+            'county': '',
+        }
+        resp = self.client.post(url, data)
+        self.assertEqual(resp.status_code, 302)
+        order = Order.objects.first()
+        # order.profile should reference the user's UserProfile
+        self.assertIsNotNone(order.profile)
+        self.assertEqual(order.profile.user, user)
