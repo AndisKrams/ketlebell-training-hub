@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <div class="container mt-4">
+    <h1>Thank you for your order</h1>
+    <p>Your order number is <strong>{{ order.order_number }}</strong>.</p>
+
+    {% if order.items.exists %}
+      <h2>Order items</h2>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Quantity</th>
+            <th>Unit price</th>
+            <th>Subtotal</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in order.items.all %}
+            <tr>
+              <td>{{ item.product_name }}</td>
+              <td>{{ item.quantity }}</td>
+              <td>&pound;{{ item.price }}</td>
+              <td>&pound;{{ item.price|floatformat:2|add:'0'|floatformat:2|floatformat }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+
+    <p class="lead">Order total: &pound;{{ order.total }}</p>
+  </div>
+{% endblock %}
