@@ -1,11 +1,15 @@
 import json
+from decimal import Decimal, InvalidOperation
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from django.contrib import messages
+from django.db import transaction
 
 from .forms import OrderForm
-from .models import Order
+from .models import Order, OrderLineItem
+from basket.models import Basket
+from kettlebell_shop.models import Kettlebell
 
 
 def checkout(request):
@@ -20,16 +24,86 @@ def checkout(request):
         form = OrderForm(request.POST)
         if form.is_valid():
             order = form.save(commit=False)
-            # Store some basket snapshot if needed (placeholder)
+            # attach profile when available
+            if request.user.is_authenticated:
+                try:
+                    order.profile = request.user.userprofile
+                except Exception:
+                    # ignore if profile is missing
+                    pass
+
+            # snapshot the session basket for debugging/audit
             order.original_basket = json.dumps(
                 request.session.get('basket', {})
             )
-            order.total = 0
-            order.save()
+
+            # create order and line items atomically
+            with transaction.atomic():
+                order.save()  # generate order_number via model save
+
+                total = Decimal('0.00')
+
+                # Authenticated users: copy from BasketItem objects
+                if request.user.is_authenticated:
+                    basket_obj, _ = Basket.objects.get_or_create(
+                        user=request.user
+                    )
+                    for it in basket_obj.items.select_related('content_type'):
+                        qty = int(it.quantity)
+                        price = Decimal(it.price_snapshot)
+                        name = str(it.content_object)
+                        OrderLineItem.objects.create(
+                            order=order,
+                            product_name=name,
+                            quantity=qty,
+                            price=price,
+                        )
+                        total += price * qty
+                    # clear DB basket items now we've copied them
+                    basket_obj.items.all().delete()
+                else:
+                    # Session-based anonymous basket format:
+                    # {weight_str: {quantity, price_gbp}}
+                    session_basket = request.session.get('basket', {})
+                    for weight_str, data in (session_basket or {}).items():
+                        qty = int(data.get('quantity', 0))
+                        try:
+                            price = Decimal(str(data.get('price_gbp', '0')))
+                        except InvalidOperation:
+                            price = Decimal('0.00')
+
+                        # try to map to a product for a nicer name
+                        name = f"{weight_str} kg kettlebell"
+                        try:
+                            w = Decimal(str(weight_str))
+                            kb = Kettlebell.objects.filter(
+                                weight=w, weight_unit='kg'
+                            ).first()
+                            if kb:
+                                name = str(kb)
+                        except Exception:
+                            pass
+
+                        OrderLineItem.objects.create(
+                            order=order,
+                            product_name=name,
+                            quantity=qty,
+                            price=price,
+                        )
+                        total += price * qty
+
+                    # clear session basket
+                    if request.session.get('basket'):
+                        del request.session['basket']
+                        request.session.modified = True
+
+                # persist computed total
+                order.total = total
+                order.save()
+
             messages.success(request, 'Order placed successfully')
             return redirect(
-                'checkout:checkout_success',
-                order_number=order.order_number,
+                'checkout:checkout_success', order_number=order.order_number
             )
         messages.error(request, 'Please correct the errors below')
     else:
