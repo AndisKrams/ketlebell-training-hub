@@ -7,8 +7,9 @@
     <form method="post" novalidate>
       {% csrf_token %}
       {{ form.non_field_errors }}
+
       <div class="row">
-        <div class="col-md-8">
+        <div class="col-md-8 order-md-1">
           {% for field in form %}
             <div class="mb-3">
               {{ field.errors }}
@@ -16,10 +17,41 @@
               {{ field }}
             </div>
           {% endfor %}
-        </div>
-      </div>
 
-      <button type="submit" class="btn btn-primary">Place order</button>
+          <button type="submit" class="btn btn-primary">Place order</button>
+        </div>
+
+        <aside class="col-md-4 order-md-2 mt-4 mt-md-0">
+          <div class="card">
+            <div class="card-body">
+              <h5 class="card-title">Order summary</h5>
+              {% if summary_items %}
+                <ul class="list-unstyled mb-2">
+                  {% for it in summary_items %}
+                    <li class="d-flex justify-content-between">
+                      <div>
+                        <strong>{{ it.name }}</strong>
+                        <div class="small text-muted">Qty: {{ it.quantity }}</div>
+                      </div>
+                      <div class="text-end">
+                        <div>&pound;{{ it.unit_price }}</div>
+                        <div class="small">&pound;{{ it.subtotal }}</div>
+                      </div>
+                    </li>
+                    <hr />
+                  {% endfor %}
+                </ul>
+                <div class="d-flex justify-content-between fw-bold">
+                  <div>Total</div>
+                  <div>&pound;{{ summary_total }}</div>
+                </div>
+              {% else %}
+                <p class="text-muted">Your basket is empty</p>
+              {% endif %}
+            </div>
+          </div>
+        </aside>
+      </div>
     </form>
   </div>
 {% endblock %}
