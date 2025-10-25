@@ -28,6 +28,17 @@ class Order(models.Model):
         max_digits=9, decimal_places=2, default=Decimal('0.00')
     )
     paid = models.BooleanField(default=False)
+    STATUS_PENDING = 'pending'
+    STATUS_PAID = 'paid'
+    STATUS_FAILED = 'failed'
+    STATUS_CHOICES = [
+        (STATUS_PENDING, 'Pending'),
+        (STATUS_PAID, 'Paid'),
+        (STATUS_FAILED, 'Failed'),
+    ]
+    status = models.CharField(
+        max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING
+    )
 
     def _generate_order_number(self):
         return uuid.uuid4().hex.upper()
