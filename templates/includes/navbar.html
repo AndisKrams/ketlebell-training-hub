@@ -40,10 +40,10 @@
 				<li><a href="{% url 'account_logout' %}" class="dropdown-item">Logout</a></li>
 			</ul>
 		</li>
-		{% else %}
-		<button class="btn-secondary" href="{% url 'account_signup' %}" class="nav-link">Register</button>
-		<button class="btn-secondary" href="{% url 'account_login' %}" class="nav-link">Login</button>
-		{% endif %}
+	{% else %}
+	<a class="btn btn-secondary me-2 nav-link" href="{% url 'account_signup' %}">Register</a>
+	<a class="btn btn-secondary nav-link" href="{% url 'account_login' %}">Login</a>
+	{% endif %}
 
 		<li class="list-inline-item">
 			<button id="open-basket" class="btn btn-link p-0 nav-link" type="button" data-bs-toggle="modal"
