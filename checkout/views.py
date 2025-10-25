@@ -5,11 +5,72 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
 from django.contrib import messages
 from django.db import transaction
+from django.conf import settings
+from django.urls import reverse
 
 from .forms import OrderForm
 from .models import Order, OrderLineItem
 from basket.models import Basket
 from kettlebell_shop.models import Kettlebell
+
+
+def create_checkout_session(request, order_number):
+    """Create a Stripe Checkout Session for an existing Order and
+    redirect the user to the hosted Stripe checkout page.
+
+    This view expects the order to already exist (created by the
+    standard checkout view). It will build line items from the
+    OrderLineItem rows.
+    """
+    try:
+        import stripe
+    except Exception:
+        messages.error(request, 'Stripe library not installed')
+        return redirect('checkout:checkout')
+
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+
+    order = get_object_or_404(Order, order_number=order_number)
+
+    # Build Stripe line items from order items
+    stripe_items = []
+    for it in order.items.all():
+        # Stripe expects unit_amount in the smallest currency unit (pence)
+        unit_amount = int((it.price * Decimal('100')).to_integral_value())
+        stripe_items.append(
+            {
+                'price_data': {
+                    'currency': settings.STRIPE_CURRENCY,
+                    'product_data': {'name': it.product_name},
+                    'unit_amount': unit_amount,
+                },
+                'quantity': it.quantity,
+            }
+        )
+
+    success_url = request.build_absolute_uri(
+        reverse(
+            'checkout:checkout_success',
+            kwargs={'order_number': order.order_number},
+        )
+    )
+    cancel_url = request.build_absolute_uri(reverse('checkout:checkout'))
+
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=stripe_items,
+            mode='payment',
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata={'order_number': order.order_number},
+        )
+    except Exception as e:
+        messages.error(request, f'Could not create Stripe session: {e}')
+        return redirect('checkout:checkout')
+
+    # Redirect to the Stripe hosted checkout page
+    return redirect(session.url)
 
 
 def checkout(request):
