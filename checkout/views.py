@@ -7,7 +7,7 @@ from django.contrib import messages
 from django.db import transaction
 from django.conf import settings
 from django.urls import reverse
-from django.http import JsonResponse, HttpResponseBadRequest
+from django.http import JsonResponse
 
 from .forms import OrderForm
 from .models import Order, OrderLineItem
@@ -127,7 +127,9 @@ def create_payment_intent(request, order_number):
                     profile.stripe_customer_id = customer_id
                     profile.save()
             except Exception as e:
-                return JsonResponse({'error': f'Could not create customer: {e}'}, status=500)
+                return JsonResponse(
+                    {'error': f'Could not create customer: {e}'}, status=500
+                )
 
     try:
         pi_kwargs = {
@@ -143,7 +145,9 @@ def create_payment_intent(request, order_number):
 
         intent = stripe.PaymentIntent.create(**pi_kwargs)
     except Exception as e:
-        return JsonResponse({'error': f'Could not create payment intent: {e}'}, status=500)
+        return JsonResponse(
+            {'error': f'Could not create payment intent: {e}'}, status=500
+        )
 
     return JsonResponse({
         'client_secret': intent.client_secret,
@@ -160,7 +164,72 @@ def checkout(request):
     if request.method == 'POST':
         form = OrderForm(request.POST)
         if form.is_valid():
+            # If the user (or session) already has a pending order for
+            # the current basket, reuse it to avoid duplicate unpaid
+            # orders. For authenticated users prefer matching by
+            # `profile`, for anonymous users track pending order in
+            # session.
             order = form.save(commit=False)
+            existing_order = None
+            if request.user.is_authenticated:
+                try:
+                    profile = request.user.userprofile
+                    existing_order = (
+                        Order.objects.filter(
+                            profile=profile, status=Order.STATUS_PENDING
+                        )
+                        .order_by('-date')
+                        .first()
+                    )
+                    # only reuse if original_basket matches current basket
+                    if existing_order:
+                        try:
+                            cur = json.dumps(
+                                request.session.get('basket', {})
+                            )
+                            if (existing_order.original_basket or '') != cur:
+                                existing_order = None
+                        except Exception:
+                            existing_order = None
+                except Exception:
+                    existing_order = None
+            else:
+                pending_number = request.session.get('pending_order_number')
+                if pending_number:
+                    try:
+                        tmp = Order.objects.filter(
+                            order_number=pending_number,
+                            status=Order.STATUS_PENDING,
+                        ).first()
+                        if tmp:
+                            # check basket match
+                            try:
+                                cur = json.dumps(
+                                    request.session.get('basket', {})
+                                )
+                                if (tmp.original_basket or '') == cur:
+                                    existing_order = tmp
+                            except Exception:
+                                existing_order = None
+                    except Exception:
+                        existing_order = None
+
+            if existing_order:
+                # reuse existing order; update contact fields
+                order = existing_order
+                order.full_name = form.cleaned_data.get('full_name')
+                order.email = form.cleaned_data.get('email')
+                order.phone_number = form.cleaned_data.get('phone_number')
+                order.street_address1 = (
+                    form.cleaned_data.get('street_address1')
+                )
+                order.street_address2 = (
+                    form.cleaned_data.get('street_address2')
+                )
+                order.town_or_city = form.cleaned_data.get('town_or_city')
+                order.postcode = form.cleaned_data.get('postcode')
+                order.county = form.cleaned_data.get('county')
+            
             # attach profile when available
             if request.user.is_authenticated:
                 try:
@@ -244,7 +313,6 @@ def checkout(request):
             # Order created — render the checkout page again but now
             # show the payment form for the created order so the user
             # can enter card details and complete payment.
-            payment_required = True
             # Build summary from the created order's line items
             summary_items = []
             summary_total = Decimal('0.00')
@@ -283,13 +351,27 @@ def checkout(request):
             initial = {
                 'full_name': request.user.get_full_name() or '',
                 'email': request.user.email or '',
-                'phone_number': getattr(profile, 'default_phone_number', '') or '',
-                'street_address1': getattr(profile, 'default_street_address1', '') or '',
-                'street_address2': getattr(profile, 'default_street_address2', '') or '',
-                'town_or_city': getattr(profile, 'default_town_or_city', '') or '',
-                'postcode': getattr(profile, 'default_postcode', '') or '',
-                'county': getattr(profile, 'default_county', '') or '',
-                'country': getattr(profile, 'default_country', '') or '',
+                'phone_number': (
+                    getattr(profile, 'default_phone_number', '') or ''
+                ),
+                'street_address1': (
+                    getattr(profile, 'default_street_address1', '') or ''
+                ),
+                'street_address2': (
+                    getattr(profile, 'default_street_address2', '') or ''
+                ),
+                'town_or_city': (
+                    getattr(profile, 'default_town_or_city', '') or ''
+                ),
+                'postcode': (
+                    getattr(profile, 'default_postcode', '') or ''
+                ),
+                'county': (
+                    getattr(profile, 'default_county', '') or ''
+                ),
+                'country': (
+                    getattr(profile, 'default_country', '') or ''
+                ),
             }
             form = OrderForm(initial=initial)
         else:
