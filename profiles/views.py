@@ -21,8 +21,8 @@ def profile_view(request):
     else:
         form = UserProfileForm(instance=profile)
 
-    # If you have an orders model, replace the empty list here
-    orders = []
+    # Load the user's orders (if any) ordered by date desc
+    orders = profile.orders.all().order_by('-date')
 
     return render(
         request,
