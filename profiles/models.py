@@ -25,6 +25,8 @@ class UserProfile(models.Model):
     )
     default_county = models.CharField(max_length=80, blank=True, null=True)
     default_country = models.CharField(max_length=40, blank=True, null=True)
+    # Stripe customer id for saving payment methods
+    stripe_customer_id = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
         return f"Profile for {self.user.username}"
