@@ -36,7 +36,7 @@
 				</div>
 			</a>
 			<ul class="dropdown-menu border-0" aria-labelledby="user-options">
-				<li><a href="#" class="dropdown-item nav-link">My Profile</a></li>
+				<li><a href="{% url 'profiles:profile' %}" class="dropdown-item nav-link">My Profile</a></li>
 				<li><a href="{% url 'account_logout' %}" class="dropdown-item">Logout</a></li>
 			</ul>
 		</li>
