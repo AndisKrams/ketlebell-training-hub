@@ -5,6 +5,7 @@ from django.http import HttpResponse
 from django.conf import settings
 
 from .models import Order
+from basket.models import Basket
 
 
 logger = logging.getLogger(__name__)
@@ -34,20 +35,34 @@ def webhook(request):
         logger.exception('Failed to parse/verify Stripe webhook: %s', e)
         return HttpResponse(status=400)
 
-    # Handle event types we care about
+    # Handle event types we care about (checkout.session.completed and
+    # payment_intent.succeeded). When we mark an order as paid we also
+    # clear the authenticated user's DB basket when possible.
     kind = event.get('type')
-    if kind == 'checkout.session.completed':
-        session = event.get('data', {}).get('object', {})
-        metadata = session.get('metadata', {}) or {}
+    if kind in ('checkout.session.completed', 'payment_intent.succeeded'):
+        obj = event.get('data', {}).get('object', {})
+        metadata = obj.get('metadata', {}) or {}
         order_number = metadata.get('order_number')
         if order_number:
             try:
                 order = Order.objects.get(order_number=order_number)
-                # If model has a 'paid' boolean, set it. Otherwise do not
-                # attempt schema changes here.
                 if hasattr(order, 'paid'):
                     order.paid = True
                     order.save()
+
+                # Clear DB basket for authenticated owner if present
+                try:
+                    if order.profile and order.profile.user:
+                        try:
+                            basket_obj = Basket.objects.get(
+                                user=order.profile.user
+                            )
+                            basket_obj.items.all().delete()
+                        except Basket.DoesNotExist:
+                            pass
+                except Exception:
+                    # ignore any issues when accessing profile/user
+                    pass
             except Order.DoesNotExist:
                 logger.warning('Webhook: order not found: %s', order_number)
 

@@ -196,8 +196,11 @@ def checkout(request):
                             price=price,
                         )
                         total += price * qty
-                    # clear DB basket items now we've copied them
-                    basket_obj.items.all().delete()
+                    # NOTE: do not clear the DB basket here. Keep items in
+                    # the user's basket until payment completes so the user
+                    # can recover or retry payment. We will clear the basket
+                    # after successful payment in `checkout_success` or via
+                    # webhook handling.
                 else:
                     # Session-based anonymous basket format:
                     # {weight_str: {quantity, price_gbp}}
@@ -229,10 +232,10 @@ def checkout(request):
                         )
                         total += price * qty
 
-                    # clear session basket
-                    if request.session.get('basket'):
-                        del request.session['basket']
-                        request.session.modified = True
+                        # NOTE: do not clear the session basket here. Keep the
+                        # anonymous user's basket in session until payment
+                        # completes; we'll clear it on `checkout_success` when
+                        # the user returns after payment.
 
                 # persist computed total
                 order.total = total
@@ -352,11 +355,36 @@ def checkout(request):
 
 def checkout_success(request, order_number):
     order = get_object_or_404(Order, order_number=order_number)
-    return render(
-        request,
-        'checkout/checkout_success.html',
-        {'order': order},
-    )
+    # If the user returned here after a successful payment, clear their
+    # basket. For authenticated users we can clear the DB basket. For
+    # anonymous users we compare the saved original_basket to the current
+    # session basket and clear the session if they match.
+    try:
+        if request.user.is_authenticated:
+            # only clear if the order belongs to this user
+            if order.profile and order.profile.user == request.user:
+                try:
+                    basket_obj = Basket.objects.get(user=request.user)
+                    basket_obj.items.all().delete()
+                except Basket.DoesNotExist:
+                    pass
+        else:
+            try:
+                orig = json.loads(order.original_basket or '{}')
+                if orig and orig == request.session.get('basket', {}):
+                    if 'basket' in request.session:
+                        del request.session['basket']
+                        request.session.modified = True
+            except Exception:
+                # if parsing fails or other error occurs we won't clear
+                # the session to avoid data loss
+                pass
+    except Exception:
+        # swallow any unexpected errors during cleanup so the success
+        # page still renders for the user
+        pass
+
+    return render(request, 'checkout/checkout_success.html', {'order': order})
 
 
 @require_POST
