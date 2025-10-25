@@ -20,4 +20,9 @@ urlpatterns = [
           views.create_checkout_session,
           name='create_session',
      ),
+     path(
+          'create-payment-intent/<order_number>/',
+          views.create_payment_intent,
+          name='create_payment_intent',
+     ),
 ]

@@ -7,6 +7,7 @@ from django.contrib import messages
 from django.db import transaction
 from django.conf import settings
 from django.urls import reverse
+from django.http import JsonResponse, HttpResponseBadRequest
 
 from .forms import OrderForm
 from .models import Order, OrderLineItem
@@ -71,6 +72,83 @@ def create_checkout_session(request, order_number):
 
     # Redirect to the Stripe hosted checkout page
     return redirect(session.url)
+
+
+@require_POST
+def create_payment_intent(request, order_number):
+    """Create a Stripe PaymentIntent for an existing order.
+
+    Expects JSON body: {"save_card": true|false}
+    Returns: JSON with client_secret and stripe_public_key.
+    """
+    try:
+        import stripe
+    except Exception:
+        return JsonResponse({'error': 'Stripe library not installed'}, status=500)
+
+    order = get_object_or_404(Order, order_number=order_number)
+
+    try:
+        body = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        body = {}
+
+    save_card = bool(body.get('save_card'))
+
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+
+    # compute amount in pence
+    try:
+        amount = int((order.total * Decimal('100')).to_integral_value())
+    except Exception:
+        return JsonResponse({'error': 'Invalid order total'}, status=400)
+
+    customer_id = None
+    if request.user.is_authenticated:
+        try:
+            profile = request.user.userprofile
+            customer_id = profile.stripe_customer_id
+        except Exception:
+            profile = None
+    else:
+        profile = None
+
+    # If user wants to save card, ensure we have a Stripe Customer
+    if save_card:
+        if not customer_id and request.user.is_authenticated:
+            # create a customer
+            try:
+                cust = stripe.Customer.create(
+                    email=order.email,
+                    name=order.full_name,
+                )
+                customer_id = cust['id']
+                if profile is not None:
+                    profile.stripe_customer_id = customer_id
+                    profile.save()
+            except Exception as e:
+                return JsonResponse({'error': f'Could not create customer: {e}'}, status=500)
+
+    try:
+        pi_kwargs = {
+            'amount': amount,
+            'currency': settings.STRIPE_CURRENCY,
+            'metadata': {'order_number': order.order_number},
+        }
+        if customer_id:
+            pi_kwargs['customer'] = customer_id
+        if save_card:
+            # signal Stripe to save payment method for future off-session use
+            pi_kwargs['setup_future_usage'] = 'off_session'
+
+        intent = stripe.PaymentIntent.create(**pi_kwargs)
+    except Exception as e:
+        return JsonResponse({'error': f'Could not create payment intent: {e}'}, status=500)
+
+    return JsonResponse({
+        'client_secret': intent.client_secret,
+        'stripe_public_key': settings.STRIPE_PUBLIC_KEY,
+    })
 
 
 def checkout(request):
@@ -160,13 +238,59 @@ def checkout(request):
                 order.total = total
                 order.save()
 
-            messages.success(request, 'Order placed successfully')
-            return redirect(
-                'checkout:checkout_success', order_number=order.order_number
-            )
+            # Order created — render the checkout page again but now
+            # show the payment form for the created order so the user
+            # can enter card details and complete payment.
+            payment_required = True
+            # Build summary from the created order's line items
+            summary_items = []
+            summary_total = Decimal('0.00')
+            for li in order.items.all():
+                qty = int(li.quantity)
+                price = Decimal(li.price)
+                subtotal = price * qty
+                summary_items.append(
+                    {
+                        'name': li.product_name,
+                        'quantity': qty,
+                        'unit_price': price,
+                        'subtotal': subtotal,
+                    }
+                )
+                summary_total += subtotal
+
+            context = {
+                'form': form,
+                'summary_items': summary_items,
+                'summary_total': summary_total,
+                'stripe_public_key': settings.STRIPE_PUBLIC_KEY,
+                'payment_required': True,
+                'order': order,
+            }
+            return render(request, 'checkout/checkout.html', context)
         messages.error(request, 'Please correct the errors below')
     else:
-        form = OrderForm()
+        # Prefill form from authenticated user's profile when available
+        if request.user.is_authenticated:
+            try:
+                profile = request.user.userprofile
+            except Exception:
+                profile = None
+
+            initial = {
+                'full_name': request.user.get_full_name() or '',
+                'email': request.user.email or '',
+                'phone_number': getattr(profile, 'default_phone_number', '') or '',
+                'street_address1': getattr(profile, 'default_street_address1', '') or '',
+                'street_address2': getattr(profile, 'default_street_address2', '') or '',
+                'town_or_city': getattr(profile, 'default_town_or_city', '') or '',
+                'postcode': getattr(profile, 'default_postcode', '') or '',
+                'county': getattr(profile, 'default_county', '') or '',
+                'country': getattr(profile, 'default_country', '') or '',
+            }
+            form = OrderForm(initial=initial)
+        else:
+            form = OrderForm()
 
     # Build an order summary (for display beside the form)
     summary_items = []
@@ -221,6 +345,7 @@ def checkout(request):
         'form': form,
         'summary_items': summary_items,
         'summary_total': summary_total,
+        'stripe_public_key': settings.STRIPE_PUBLIC_KEY,
     }
     return render(request, 'checkout/checkout.html', context)
 
