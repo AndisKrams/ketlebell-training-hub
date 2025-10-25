@@ -25,4 +25,9 @@ urlpatterns = [
           views.create_payment_intent,
           name='create_payment_intent',
      ),
+     path(
+          'cancel-order/<order_number>/',
+          views.cancel_order,
+          name='cancel_order',
+     ),
 ]

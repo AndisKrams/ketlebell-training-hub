@@ -27,7 +27,10 @@
                 Save card for future purchases
               </label>
             </div>
-            <button id="card-button" class="btn btn-success">Pay & Complete Order</button>
+            <div class="d-flex align-items-center">
+              <button id="card-button" class="btn btn-success">Pay &amp; Complete Order</button>
+              <button id="cancel-button" type="button" class="btn btn-outline-secondary ms-2">Cancel</button>
+            </div>
           {% else %}
             <button type="submit" class="btn btn-primary">Place order</button>
           {% endif %}
@@ -91,6 +94,37 @@
         }
 
         const cardButton = document.getElementById('card-button');
+        const cancelButton = document.getElementById('cancel-button');
+
+        // Cancel pending order via POST (uses CSRF cookie)
+        if (cancelButton) {
+          cancelButton.addEventListener('click', async function (ev) {
+            ev.preventDefault();
+            if (!confirm('Cancel this pending order?')) {
+              return;
+            }
+            cancelButton.disabled = true;
+            try {
+              const r = await fetch("{% url 'checkout:cancel_order' order.order_number %}", {
+                method: 'POST',
+                headers: {
+                  'X-CSRFToken': getCookie('csrftoken'),
+                },
+              });
+              // If server redirected, follow the redirect URL
+              if (r.redirected) {
+                window.location = r.url;
+                return;
+              }
+              // otherwise refresh to reflect cancelled state
+              window.location.reload();
+            } catch (e) {
+              alert('Could not cancel order: ' + e);
+              cancelButton.disabled = false;
+            }
+          });
+        }
+
         cardButton.addEventListener('click', async function (ev) {
           ev.preventDefault();
           cardButton.disabled = true;

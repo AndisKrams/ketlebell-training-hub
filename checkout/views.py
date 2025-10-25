@@ -8,7 +8,6 @@ from django.db import transaction
 from django.conf import settings
 from django.urls import reverse
 from django.http import JsonResponse
-
 from .forms import OrderForm
 from .models import Order, OrderLineItem
 from basket.models import Basket
@@ -265,9 +264,9 @@ def checkout(request):
                             price=price,
                         )
                         total += price * qty
-                    # NOTE: do not clear the DB basket here. Keep items in
+                    # Do not clear the DB basket here. Keep items in
                     # the user's basket until payment completes so the user
-                    # can recover or retry payment. We will clear the basket
+                    # can recover or retry payment. Will clear the basket
                     # after successful payment in `checkout_success` or via
                     # webhook handling.
                 else:
@@ -301,7 +300,7 @@ def checkout(request):
                         )
                         total += price * qty
 
-                        # NOTE: do not clear the session basket here. Keep the
+                        # Do not clear the session basket here. Keep the
                         # anonymous user's basket in session until payment
                         # completes; we'll clear it on `checkout_success` when
                         # the user returns after payment.
@@ -338,6 +337,13 @@ def checkout(request):
                 'payment_required': True,
                 'order': order,
             }
+            # Mark pending order in session so anonymous users can later
+            # cancel it. Also harmless for authenticated users.
+            try:
+                request.session['pending_order_number'] = order.order_number
+                request.session.modified = True
+            except Exception:
+                pass
             return render(request, 'checkout/checkout.html', context)
         messages.error(request, 'Please correct the errors below')
     else:
@@ -480,3 +486,53 @@ def cache_checkout_data(request):
         return render(request, 'checkout/cache_ok.html')
     except Exception:
         return render(request, 'checkout/cache_fail.html')
+
+
+@require_POST
+def cancel_order(request, order_number):
+    """Cancel a pending order.
+
+    For authenticated users the order must belong to the user's profile.
+    For anonymous users, the order_number must match the session's
+    pending_order_number. Only orders with STATUS_PENDING will be
+    cancelled (marked as STATUS_FAILED) to preserve audit trail.
+    """
+    try:
+        order = Order.objects.get(order_number=order_number)
+    except Order.DoesNotExist:
+        messages.error(request, 'Order not found')
+        return redirect('checkout:checkout')
+
+    # only allow cancelling pending orders
+    if order.status != Order.STATUS_PENDING:
+        messages.error(request, 'Only pending orders can be cancelled')
+        return redirect('profiles:profile' if request.user.is_authenticated else 'checkout:checkout')
+
+    # Authenticated user: ensure order belongs to them
+    if request.user.is_authenticated:
+        try:
+            if not order.profile or order.profile.user != request.user:
+                messages.error(request, 'You do not have permission to cancel this order')
+                return redirect('profiles:profile')
+        except Exception:
+            messages.error(request, 'Could not verify order ownership')
+            return redirect('profiles:profile')
+    else:
+        # Anonymous: check pending number in session
+        pending = request.session.get('pending_order_number')
+        if not pending or pending != order_number:
+            messages.error(request, 'You do not have permission to cancel this order')
+            return redirect('checkout:checkout')
+
+    # Mark order as failed (cancelled) and clear any session marker
+    order.status = Order.STATUS_FAILED
+    order.paid = False
+    order.save()
+
+    # clear pending_order_number from session if it matches
+    if request.session.get('pending_order_number') == order_number:
+        del request.session['pending_order_number']
+        request.session.modified = True
+
+    messages.success(request, 'Pending order cancelled')
+    return redirect('profiles:profile' if request.user.is_authenticated else 'checkout:checkout')

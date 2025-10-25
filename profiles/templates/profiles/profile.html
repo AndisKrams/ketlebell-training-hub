@@ -37,6 +37,14 @@
             <div class="text-end">
               <div>£{{ order.total }}</div>
               <div class="small text-muted">{{ order.status|capfirst }}</div>
+              {% if order.status == 'pending' %}
+                <div class="mt-2">
+                  <form method="post" action="{% url 'checkout:cancel_order' order.order_number %}">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-secondary">Cancel</button>
+                  </form>
+                </div>
+              {% endif %}
             </div>
           </li>
         {% endfor %}
