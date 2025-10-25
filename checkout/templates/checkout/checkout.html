@@ -72,7 +72,7 @@
   {% if payment_required %}
     <script src="https://js.stripe.com/v3/"></script>
     <script>
-      (function() {
+      document.addEventListener('DOMContentLoaded', function () {
         const stripe = Stripe("{{ stripe_public_key }}");
         const elements = stripe.elements();
         const card = elements.create('card');
@@ -96,14 +96,20 @@
         const cardButton = document.getElementById('card-button');
         const cancelButton = document.getElementById('cancel-button');
 
-        // Cancel pending order via POST (uses CSRF cookie)
+        // Cancel pending order: open Bootstrap modal and POST when confirmed
         if (cancelButton) {
-          cancelButton.addEventListener('click', async function (ev) {
+          const cancelModalEl = document.getElementById('cancelModal');
+          const cancelModal = new bootstrap.Modal(cancelModalEl);
+          const confirmCancel = document.getElementById('confirm-cancel');
+
+          cancelButton.addEventListener('click', function (ev) {
             ev.preventDefault();
-            if (!confirm('Cancel this pending order?')) {
-              return;
-            }
-            cancelButton.disabled = true;
+            cancelModal.show();
+          });
+
+          confirmCancel.addEventListener('click', async function (ev) {
+            ev.preventDefault();
+            confirmCancel.disabled = true;
             try {
               const r = await fetch("{% url 'checkout:cancel_order' order.order_number %}", {
                 method: 'POST',
@@ -111,16 +117,16 @@
                   'X-CSRFToken': getCookie('csrftoken'),
                 },
               });
-              // If server redirected, follow the redirect URL
+              // follow server redirect when provided
               if (r.redirected) {
                 window.location = r.url;
                 return;
               }
-              // otherwise refresh to reflect cancelled state
+              // otherwise reload to show updated state
               window.location.reload();
             } catch (e) {
               alert('Could not cancel order: ' + e);
-              cancelButton.disabled = false;
+              confirmCancel.disabled = false;
             }
           });
         }
@@ -177,7 +183,26 @@
             }
           }
         });
-      })();
+      });
     </script>
   {% endif %}
+  
+  <!-- Cancel confirmation modal -->
+  <div class="modal fade" id="cancelModal" tabindex="-1" aria-labelledby="cancelModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="cancelModalLabel">Cancel pending order</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          Are you sure you want to cancel this pending order? This will keep a record of the order but mark it as cancelled.
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+          <button id="confirm-cancel" type="button" class="btn btn-danger">Yes, cancel order</button>
+        </div>
+      </div>
+    </div>
+  </div>
 {% endblock %}
