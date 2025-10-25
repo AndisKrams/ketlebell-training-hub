@@ -534,5 +534,31 @@ def cancel_order(request, order_number):
         del request.session['pending_order_number']
         request.session.modified = True
 
+    # If this order was created from the user's basket, clear that
+    # basket so the held quantities are released back to stock. For
+    # authenticated users we can clear the DB basket. For anonymous
+    # users clear the session basket only when it matches the
+    # order.original_basket to avoid removing unrelated items.
+    try:
+        if request.user.is_authenticated:
+            if order.profile and order.profile.user == request.user:
+                try:
+                    basket_obj = Basket.objects.get(user=request.user)
+                    basket_obj.items.all().delete()
+                except Basket.DoesNotExist:
+                    pass
+        else:
+            try:
+                orig = json.loads(order.original_basket or '{}')
+                if orig and orig == request.session.get('basket', {}):
+                    if 'basket' in request.session:
+                        del request.session['basket']
+                        request.session.modified = True
+            except Exception:
+                pass
+    except Exception:
+        # don't block the cancel flow on cleanup errors
+        pass
+
     messages.success(request, 'Pending order cancelled')
     return redirect('profiles:profile' if request.user.is_authenticated else 'checkout:checkout')
