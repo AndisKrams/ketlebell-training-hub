@@ -18,7 +18,19 @@
             </div>
           {% endfor %}
 
-          <button type="submit" class="btn btn-primary">Place order</button>
+          {% if payment_required %}
+            <h4 class="mt-4">Payment</h4>
+            <div id="card-element" class="mb-3"><!-- Stripe Element mounts here --></div>
+            <div class="form-check mb-3">
+              <input class="form-check-input" type="checkbox" value="" id="save-card">
+              <label class="form-check-label" for="save-card">
+                Save card for future purchases
+              </label>
+            </div>
+            <button id="card-button" class="btn btn-success">Pay & Complete Order</button>
+          {% else %}
+            <button type="submit" class="btn btn-primary">Place order</button>
+          {% endif %}
         </div>
 
         <aside class="col-md-4 order-md-2 mt-4 mt-md-0">
@@ -54,4 +66,84 @@
       </div>
     </form>
   </div>
+  {% if payment_required %}
+    <script src="https://js.stripe.com/v3/"></script>
+    <script>
+      (function() {
+        const stripe = Stripe("{{ stripe_public_key }}");
+        const elements = stripe.elements();
+        const card = elements.create('card');
+        card.mount('#card-element');
+
+        function getCookie(name) {
+          let cookieValue = null;
+          if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+              const cookie = cookies[i].trim();
+              if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+              }
+            }
+          }
+          return cookieValue;
+        }
+
+        const cardButton = document.getElementById('card-button');
+        cardButton.addEventListener('click', async function (ev) {
+          ev.preventDefault();
+          cardButton.disabled = true;
+
+          const saveCard = document.getElementById('save-card').checked;
+          const orderUrl = "{{ request.build_absolute_uri }}"; // not used but kept
+
+          // Request a client_secret for this order
+          const resp = await fetch(
+            "{% url 'checkout:create_payment_intent' order.order_number %}",
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCookie('csrftoken'),
+              },
+              body: JSON.stringify({save_card: saveCard}),
+            }
+          );
+          const data = await resp.json();
+          if (data.error) {
+            alert('Payment init failed: ' + data.error);
+            cardButton.disabled = false;
+            return;
+          }
+
+          const clientSecret = data.client_secret;
+
+          // Collect billing details from the form
+          const name = document.querySelector('[name="full_name"]')?.value || '';
+          const email = document.querySelector('[name="email"]')?.value || '';
+
+          const result = await stripe.confirmCardPayment(clientSecret, {
+            payment_method: {
+              card: card,
+              billing_details: {name: name, email: email},
+            }
+          });
+
+          if (result.error) {
+            alert(result.error.message || 'Payment failed');
+            cardButton.disabled = false;
+          } else {
+            if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
+              // Redirect to success page for this order
+              window.location = "{% url 'checkout:checkout_success' order_number=order.order_number %}";
+            } else {
+              alert('Payment processing: ' + (result.paymentIntent?.status || 'unknown'));
+              cardButton.disabled = false;
+            }
+          }
+        });
+      })();
+    </script>
+  {% endif %}
 {% endblock %}
