@@ -53,10 +53,9 @@ class CheckoutTests(TestCase):
 
         # line items created
         self.assertEqual(order.items.count(), 1)
-
-        # session cleared
+        # Items are kept in session until payment completes
         session = self.client.session
-        self.assertNotIn("basket", session)
+        self.assertIn("basket", session)
 
     def test_authenticated_checkout_copies_basketitems_and_clears_db(self):
         user = User.objects.create_user("buyer", "b@example.com", "pass")
@@ -91,9 +90,8 @@ class CheckoutTests(TestCase):
         order = Order.objects.first()
         self.assertEqual(order.items.count(), 1)
         self.assertEqual(order.total, self.kb.price_gbp * 3)
-
-        # DB basket cleared
-        self.assertEqual(basket_obj.items.count(), 0)
+        # Items are kept in DB until payment completes
+        self.assertEqual(basket_obj.items.count(), 1)
 
     def test_cache_checkout_data_stores_json_and_returns_ok(self):
         url = reverse('checkout:cache_checkout_data')
