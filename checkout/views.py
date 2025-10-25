@@ -548,12 +548,14 @@ def cancel_order(request, order_number):
                 except Basket.DoesNotExist:
                     pass
         else:
+            # Clear the session basket for anonymous users so held
+            # quantities are released. We clear unconditionally because
+            # the session belongs to the user who created the pending
+            # order (we already verified pending_order_number earlier).
             try:
-                orig = json.loads(order.original_basket or '{}')
-                if orig and orig == request.session.get('basket', {}):
-                    if 'basket' in request.session:
-                        del request.session['basket']
-                        request.session.modified = True
+                if 'basket' in request.session:
+                    del request.session['basket']
+                    request.session.modified = True
             except Exception:
                 pass
     except Exception:
