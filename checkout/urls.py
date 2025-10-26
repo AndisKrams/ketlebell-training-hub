@@ -26,6 +26,11 @@ urlpatterns = [
           name='create_payment_intent',
      ),
      path(
+          'mark-paid/<order_number>/',
+          views.mark_order_paid,
+          name='mark_order_paid',
+     ),
+     path(
           'cancel-order/<order_number>/',
           views.cancel_order,
           name='cancel_order',
