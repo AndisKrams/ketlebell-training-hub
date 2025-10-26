@@ -10,6 +10,7 @@ try:
 except Exception:
     ContactSettings = None
     ContactMessage = None
+from checkout.models import Order
 from django.conf import settings
 
 
@@ -73,8 +74,11 @@ def profile_view(request):
     else:
         form = UserProfileForm(instance=profile)
 
-    # Load the user's orders (if any) ordered by date desc
-    orders = profile.orders.all().order_by('-date')
+    # Load the user's orders (if any) ordered by date desc, excluding failed
+    try:
+        orders = profile.orders.exclude(status=Order.STATUS_FAILED).order_by('-date')
+    except Exception:
+        orders = profile.orders.all().order_by('-date')
 
     # Fetch saved payment methods (masked) from Stripe when available
     payment_methods = _get_saved_payment_methods(profile)
