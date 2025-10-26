@@ -46,9 +46,11 @@ def webhook(request):
         if order_number:
             try:
                 order = Order.objects.get(order_number=order_number)
-                if hasattr(order, 'paid'):
-                    order.paid = True
-                    order.save()
+                # Mark order as paid and update status so the user sees
+                # it as awaiting delivery in their profile.
+                order.paid = True
+                order.status = Order.STATUS_PAID
+                order.save()
 
                 # Clear DB basket for authenticated owner if present
                 try:
