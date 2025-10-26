@@ -73,6 +73,22 @@ class UserProfileForm(forms.ModelForm):
                     placeholder = base
                 field.widget.attrs['placeholder'] = placeholder
 
+            # Add semantic autocomplete attributes to help browser autofill
+            autocomplete_map = {
+                'full_name': 'name',
+                'email': 'email',
+                'default_phone_number': 'tel',
+                'default_street_address1': 'address-line1',
+                'default_street_address2': 'address-line2',
+                'default_town_or_city': 'address-level2',
+                'default_county': 'address-level1',
+                'default_postcode': 'postal-code',
+                'default_country': 'country',
+            }
+            ac = autocomplete_map.get(field_name)
+            if ac:
+                field.widget.attrs['autocomplete'] = ac
+
             field.widget.attrs['class'] = cls
             field.label = False
 

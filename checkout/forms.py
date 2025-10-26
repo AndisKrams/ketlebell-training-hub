@@ -34,7 +34,23 @@ class OrderForm(forms.ModelForm):
         self.fields['full_name'].widget.attrs.update({'autofocus': True})
         for field_name, placeholder in placeholders.items():
             if field_name in self.fields:
-                self.fields[field_name].widget.attrs.update({
+                attrs = {
                     'placeholder': placeholder,
                     'class': 'border-black rounded-0',
-                })
+                }
+                # Add semantic autocomplete attributes for better autofill
+                autocomplete_map = {
+                    'full_name': 'name',
+                    'email': 'email',
+                    'phone_number': 'tel',
+                    'street_address1': 'address-line1',
+                    'street_address2': 'address-line2',
+                    'town_or_city': 'address-level2',
+                    'county': 'address-level1',
+                    'postcode': 'postal-code',
+                    'country': 'country',
+                }
+                ac = autocomplete_map.get(field_name)
+                if ac:
+                    attrs['autocomplete'] = ac
+                self.fields[field_name].widget.attrs.update(attrs)
