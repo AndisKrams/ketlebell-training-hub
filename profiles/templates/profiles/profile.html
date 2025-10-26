@@ -36,7 +36,15 @@
             </div>
             <div class="text-end">
               <div>£{{ order.total }}</div>
-              <div class="small text-muted">{{ order.status|capfirst }}</div>
+              <div class="small text-muted">
+                {% if order.status == 'paid' %}
+                  Awaiting delivery
+                {% elif order.status == 'dispatched' %}
+                  Dispatched
+                {% else %}
+                  {{ order.status|capfirst }}
+                {% endif %}
+              </div>
               {% if order.status == 'pending' %}
                 <div class="mt-2">
                   <form method="post" action="{% url 'checkout:cancel_order' order.order_number %}">
