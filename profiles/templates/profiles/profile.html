@@ -99,6 +99,35 @@
         token and show masked card details here.</p>
     {% endif %}
   </div>
+  <div class="col-md-6 mt-3">
+    <h2>Your messages</h2>
+    <p class="text-muted">Messages you've sent about orders.</p>
+    {% if contact_messages %}
+      <ul class="list-group">
+        {% for msg in contact_messages %}
+          <li class="list-group-item">
+            <div class="d-flex justify-content-between">
+              <div>
+                <strong>{{ msg.subject|default:'(no subject)' }}</strong>
+                <div class="small text-muted">Sent {{ msg.created }}</div>
+                {% if msg.order %}
+                  <div class="small">Order: {{ msg.order.order_number }}</div>
+                {% endif %}
+              </div>
+              <div class="text-end">
+                {% if msg.copied_to_email %}
+                  <span class="badge bg-secondary">Copied to email</span>
+                {% endif %}
+              </div>
+            </div>
+            <div class="mt-2">{{ msg.message|linebreaks }}</div>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="text-muted">No messages found.</p>
+    {% endif %}
+  </div>
 </div>
 
 {% endblock %}

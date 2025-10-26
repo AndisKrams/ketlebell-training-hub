@@ -6,9 +6,10 @@ from .forms import UserProfileForm
 from .models import UserProfile
 try:
     # contact app is optional; import at runtime to avoid startup errors
-    from contact.models import ContactSettings
+    from contact.models import ContactSettings, ContactMessage
 except Exception:
     ContactSettings = None
+    ContactMessage = None
 from django.conf import settings
 
 
@@ -103,6 +104,18 @@ def profile_view(request):
         # attach attribute for template use
         setattr(o, 'contact_allowed', allowed)
 
+    # Load the user's previous contact messages (if contact app present)
+    contact_messages = []
+    if ContactMessage is not None:
+        try:
+            contact_messages = (
+                ContactMessage.objects.filter(user=request.user)
+                .select_related('order')
+                .order_by('-created')
+            )
+        except Exception:
+            contact_messages = []
+
     return render(
         request,
         'profiles/profile.html',
@@ -110,7 +123,8 @@ def profile_view(request):
             'form': form,
             'orders': orders,
             'payment_methods': payment_methods,
-            'contact_days_allowed': days_allowed,
+                'contact_days_allowed': days_allowed,
+                'contact_messages': contact_messages,
         },
     )
 
