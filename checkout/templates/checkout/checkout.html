@@ -175,6 +175,16 @@
             cardButton.disabled = false;
           } else {
             if (result.paymentIntent && result.paymentIntent.status === 'succeeded') {
+              // Inform server immediately so order is marked paid for UX,
+              // then redirect to success page. Webhook will also confirm.
+              try {
+                await fetch("{% url 'checkout:mark_order_paid' order.order_number %}", {
+                  method: 'POST',
+                  headers: { 'X-CSRFToken': getCookie('csrftoken') }
+                });
+              } catch (e) {
+                // ignore; webhook will still update the order
+              }
               // Redirect to success page for this order
               window.location = "{% url 'checkout:checkout_success' order_number=order.order_number %}";
             } else {
