@@ -56,10 +56,12 @@
                   <a href="{% url 'checkout:resume' order.order_number %}" class="btn btn-sm btn-success">Complete</a>
                 </div>
               {% endif %}
-              {% if order.status == 'paid' and order.contact_allowed %}
-                <div class="mt-2">
-                  <a href="{% url 'contact:contact_order' order.order_number %}" class="btn btn-sm btn-outline-primary">Contact about this order</a>
-                </div>
+              {% if order.contact_allowed %}
+                {% if order.status == 'paid' or order.status == 'dispatched' %}
+                  <div class="mt-2">
+                    <a href="{% url 'contact:contact_order' order.order_number %}" class="btn btn-sm btn-outline-primary">Contact about this order</a>
+                  </div>
+                {% endif %}
               {% endif %}
             </div>
           </li>

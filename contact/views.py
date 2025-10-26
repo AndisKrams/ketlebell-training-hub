@@ -26,9 +26,9 @@ def contact_order(request, order_number):
         messages.error(request, 'You do not have permission to contact us about this order')
         return redirect('profiles:profile')
 
-    # Only allow contact for paid orders and within allowed window
-    if order.status != Order.STATUS_PAID:
-        messages.error(request, 'You can only contact us about paid orders')
+    # Only allow contact for paid or dispatched orders and within allowed window
+    if order.status not in (Order.STATUS_PAID, Order.STATUS_DISPATCHED):
+        messages.error(request, 'You can only contact us about paid or dispatched orders')
         return redirect('profiles:profile')
 
     cfg = _get_settings()

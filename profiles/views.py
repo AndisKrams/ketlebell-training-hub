@@ -93,7 +93,8 @@ def profile_view(request):
     for o in orders:
         allowed = False
         try:
-            if o.status == 'paid':
+            # Allow contact for paid and dispatched orders within the window
+            if o.status in ('paid', 'dispatched'):
                 cutoff = o.date + timezone.timedelta(days=days_allowed)
                 if timezone.now() <= cutoff:
                     allowed = True
