@@ -4,6 +4,11 @@ from django.contrib.auth.decorators import login_required
 
 from .forms import UserProfileForm
 from .models import UserProfile
+try:
+    # contact app is optional; import at runtime to avoid startup errors
+    from contact.models import ContactSettings
+except Exception:
+    ContactSettings = None
 from django.conf import settings
 
 
@@ -73,10 +78,39 @@ def profile_view(request):
     # Fetch saved payment methods (masked) from Stripe when available
     payment_methods = _get_saved_payment_methods(profile)
 
+    # Determine contact availability window (days) from ContactSettings
+    days_allowed = 42
+    if ContactSettings is not None:
+        try:
+            cfg = ContactSettings.objects.first()
+            if cfg and getattr(cfg, 'days_after_order', None) is not None:
+                days_allowed = cfg.days_after_order
+        except Exception:
+            pass
+
+    # Annotate each order with whether contact is allowed (used by template)
+    from django.utils import timezone
+    for o in orders:
+        allowed = False
+        try:
+            if o.status == 'paid':
+                cutoff = o.date + timezone.timedelta(days=days_allowed)
+                if timezone.now() <= cutoff:
+                    allowed = True
+        except Exception:
+            allowed = False
+        # attach attribute for template use
+        setattr(o, 'contact_allowed', allowed)
+
     return render(
         request,
         'profiles/profile.html',
-        {'form': form, 'orders': orders, 'payment_methods': payment_methods},
+        {
+            'form': form,
+            'orders': orders,
+            'payment_methods': payment_methods,
+            'contact_days_allowed': days_allowed,
+        },
     )
 
 

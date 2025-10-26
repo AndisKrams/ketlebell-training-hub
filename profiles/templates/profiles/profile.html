@@ -55,6 +55,11 @@
                   </form>
                 </div>
               {% endif %}
+              {% if order.status == 'paid' and order.contact_allowed %}
+                <div class="mt-2">
+                  <a href="{% url 'contact:contact_order' order.order_number %}" class="btn btn-sm btn-outline-primary">Contact about this order</a>
+                </div>
+              {% endif %}
             </div>
           </li>
         {% endfor %}
