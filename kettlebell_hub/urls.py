@@ -31,4 +31,5 @@ urlpatterns = [
             'checkout',
         ), namespace='checkout'),
     ),
+    path('contact/', include(('contact.urls', 'contact'), namespace='contact')),
 ]
