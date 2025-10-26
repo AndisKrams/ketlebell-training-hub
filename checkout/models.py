@@ -30,10 +30,12 @@ class Order(models.Model):
     paid = models.BooleanField(default=False)
     STATUS_PENDING = 'pending'
     STATUS_PAID = 'paid'
+    STATUS_DISPATCHED = 'dispatched'
     STATUS_FAILED = 'failed'
     STATUS_CHOICES = [
         (STATUS_PENDING, 'Pending'),
         (STATUS_PAID, 'Paid'),
+        (STATUS_DISPATCHED, 'Dispatched'),
         (STATUS_FAILED, 'Failed'),
     ]
     status = models.CharField(
