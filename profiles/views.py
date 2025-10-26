@@ -23,6 +23,16 @@ def _get_saved_payment_methods(profile):
         methods = stripe.PaymentMethod.list(
             customer=profile.stripe_customer_id, type='card'
         )
+        # Try to determine the customer's default payment method (if set)
+        default_pm = None
+        try:
+            cust = stripe.Customer.retrieve(profile.stripe_customer_id)
+            default_pm = (
+                (cust.get('invoice_settings') or {}).get('default_payment_method')
+                or cust.get('default_source')
+            )
+        except Exception:
+            default_pm = None
         for m in methods.get('data', []):
             card = m.get('card', {})
             pm_list.append(
@@ -32,6 +42,7 @@ def _get_saved_payment_methods(profile):
                     'last4': card.get('last4'),
                     'exp_month': card.get('exp_month'),
                     'exp_year': card.get('exp_year'),
+                    'is_default': True if default_pm and m.get('id') == default_pm else False,
                 }
             )
     except Exception:

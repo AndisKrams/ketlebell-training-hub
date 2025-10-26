@@ -4,6 +4,8 @@
 <div class="row mt-4">
   <div class="col-md-6">
     <h2>Your profile</h2>
+    <p class="mb-2"><strong>{{ request.user.get_full_name }}</strong></p>
+    <p class="mb-3 text-muted">{{ request.user.email }}</p>
     {% if messages %}
       {% for message in messages %}
         <div class="alert alert-{{ message.tags }}" role="alert">{{ message }}</div>
@@ -69,6 +71,9 @@
           <li class="list-group-item d-flex justify-content-between align-items-center">
             <div>
               <strong>{{ pm.brand|default:'Card' }} ••••{{ pm.last4 }}</strong>
+              {% if pm.is_default %}
+                <span class="badge bg-primary ms-2">Default</span>
+              {% endif %}
               <div class="small text-muted">Expires {{ pm.exp_month }}/{{ pm.exp_year }}</div>
             </div>
             <div class="text-end">
