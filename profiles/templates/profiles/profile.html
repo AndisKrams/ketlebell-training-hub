@@ -48,11 +48,12 @@
                 {% endif %}
               </div>
               {% if order.status == 'pending' %}
-                <div class="mt-2">
+                <div class="mt-2 d-flex gap-2">
                   <form method="post" action="{% url 'checkout:cancel_order' order.order_number %}">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-sm btn-outline-secondary">Cancel</button>
                   </form>
+                  <a href="{% url 'checkout:resume' order.order_number %}" class="btn btn-sm btn-success">Complete</a>
                 </div>
               {% endif %}
               {% if order.status == 'paid' and order.contact_allowed %}

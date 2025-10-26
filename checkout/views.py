@@ -493,6 +493,69 @@ def checkout(request):
     return render(request, 'checkout/checkout.html', context)
 
 
+def resume_checkout(request, order_number):
+    """Render the checkout/payment form for an existing pending order.
+
+    Ownership: authenticated user must own the order, or anonymous users
+    must have the matching pending_order_number in session.
+    """
+    order = get_object_or_404(Order, order_number=order_number)
+
+    # Ownership / session check
+    if request.user.is_authenticated:
+        try:
+            if not order.profile or order.profile.user != request.user:
+                messages.error(request, 'You do not have permission to complete this order')
+                return redirect('profiles:profile')
+        except Exception:
+            messages.error(request, 'Could not verify order ownership')
+            return redirect('profiles:profile')
+    else:
+        pending = request.session.get('pending_order_number')
+        if not pending or pending != order_number:
+            messages.error(request, 'You do not have permission to complete this order')
+            return redirect('checkout:checkout')
+
+    # Only pending orders may be completed here
+    if order.status != Order.STATUS_PENDING:
+        messages.error(request, 'Only pending orders can be completed')
+        return redirect('profiles:profile' if request.user.is_authenticated else 'checkout:checkout')
+
+    # Build summary items from order line items
+    summary_items = []
+    summary_total = Decimal('0.00')
+    for li in order.items.all():
+        qty = int(li.quantity)
+        price = Decimal(li.price)
+        subtotal = price * qty
+        summary_items.append(
+            {
+                'name': li.product_name,
+                'quantity': qty,
+                'unit_price': price,
+                'subtotal': subtotal,
+            }
+        )
+        summary_total += subtotal
+
+    # Mark pending order in session for anonymous users
+    try:
+        request.session['pending_order_number'] = order.order_number
+        request.session.modified = True
+    except Exception:
+        pass
+
+    context = {
+        'form': None,
+        'summary_items': summary_items,
+        'summary_total': summary_total,
+        'stripe_public_key': settings.STRIPE_PUBLIC_KEY,
+        'payment_required': True,
+        'order': order,
+    }
+    return render(request, 'checkout/checkout.html', context)
+
+
 def checkout_success(request, order_number):
     order = get_object_or_404(Order, order_number=order_number)
     # If the user returned here after a successful payment, clear their
