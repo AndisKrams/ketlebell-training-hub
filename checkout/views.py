@@ -12,6 +12,58 @@ from .forms import OrderForm
 from .models import Order, OrderLineItem
 from basket.models import Basket
 from kettlebell_shop.models import Kettlebell
+from django.views.decorators.http import require_POST
+
+
+@require_POST
+def mark_order_paid(request, order_number):
+    """Mark the given order as paid.
+
+    This endpoint is called by the client after a successful
+    confirmCardPayment to update order state immediately for UX.
+    It is idempotent and also protected by ownership checks: the
+    authenticated user must own the order, or the session must
+    contain the matching pending_order_number for anonymous users.
+    """
+    try:
+        order = Order.objects.get(order_number=order_number)
+    except Order.DoesNotExist:
+        return JsonResponse({'ok': False, 'error': 'Order not found'}, status=404)
+
+    # ownership / session check
+    if request.user.is_authenticated:
+        try:
+            if not order.profile or order.profile.user != request.user:
+                return JsonResponse({'ok': False, 'error': 'Permission denied'}, status=403)
+        except Exception:
+            return JsonResponse({'ok': False, 'error': 'Permission check failed'}, status=403)
+    else:
+        pending = request.session.get('pending_order_number')
+        if not pending or pending != order_number:
+            return JsonResponse({'ok': False, 'error': 'Permission denied'}, status=403)
+
+    # mark paid and status
+    order.paid = True
+    order.status = Order.STATUS_PAID
+    order.save()
+
+    # clear pending marker from session
+    if request.session.get('pending_order_number') == order_number:
+        del request.session['pending_order_number']
+        request.session.modified = True
+
+    # clear DB basket if owned
+    try:
+        if request.user.is_authenticated and order.profile and order.profile.user == request.user:
+            try:
+                basket_obj = Basket.objects.get(user=request.user)
+                basket_obj.items.all().delete()
+            except Basket.DoesNotExist:
+                pass
+    except Exception:
+        pass
+
+    return JsonResponse({'ok': True})
 
 
 def create_checkout_session(request, order_number):
