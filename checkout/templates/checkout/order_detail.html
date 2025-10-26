@@ -11,11 +11,12 @@
       {% for li in items %}
         <li class="list-group-item d-flex justify-content-between">
           <div>
-            <strong>{{ li.product_name }}</strong>
+            <strong>{{ li.name }}</strong>
             <div class="small text-muted">Qty: {{ li.quantity }}</div>
           </div>
-          <div>
-            £{{ li.price }}
+          <div class="text-end">
+            <div>&pound;{{ li.unit_price }}</div>
+            <div class="small">&pound;{{ li.subtotal }}</div>
           </div>
         </li>
       {% endfor %}

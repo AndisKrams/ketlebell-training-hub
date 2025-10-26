@@ -5,7 +5,7 @@
     <h1>Thank you for your order</h1>
     <p>Your order number is <strong>{{ order.order_number }}</strong>.</p>
 
-    {% if order.items.exists %}
+    {% if items %}
       <h2>Order items</h2>
       <table class="table">
         <thead>
@@ -17,12 +17,12 @@
           </tr>
         </thead>
         <tbody>
-          {% for item in order.items.all %}
+          {% for item in items %}
             <tr>
-              <td>{{ item.product_name }}</td>
+              <td>{{ item.name }}</td>
               <td>{{ item.quantity }}</td>
-              <td>&pound;{{ item.price }}</td>
-              <td>&pound;{{ item.price|floatformat:2|add:'0'|floatformat:2|floatformat }}</td>
+              <td>&pound;{{ item.unit_price }}</td>
+              <td>&pound;{{ item.subtotal|floatformat:2 }}</td>
             </tr>
           {% endfor %}
         </tbody>

@@ -1,5 +1,6 @@
 import json
 from decimal import Decimal, InvalidOperation
+from collections import OrderedDict
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.decorators.http import require_POST
@@ -123,6 +124,43 @@ def create_checkout_session(request, order_number):
 
     # Redirect to the Stripe hosted checkout page
     return redirect(session.url)
+
+
+def _aggregate_order_items(items_iterable):
+    """Aggregate an iterable of OrderLineItem objects by product name
+    and unit price, summing quantities. Returns a list of dicts with
+    keys: name, unit_price (Decimal), quantity (int), subtotal (Decimal).
+    """
+    groups = OrderedDict()
+    for li in items_iterable:
+        try:
+            name = li.product_name
+            unit_price = Decimal(li.price)
+            qty = int(li.quantity)
+        except Exception:
+            # Skip malformed line items
+            continue
+        key = (name, str(unit_price))
+        if key not in groups:
+            groups[key] = {'name': name, 'unit_price': unit_price, 'quantity': qty}
+        else:
+            groups[key]['quantity'] += qty
+
+    result = []
+    for v in groups.values():
+        subtotal = v['unit_price'] * v['quantity']
+        # Provide both new keys and legacy keys for templates
+        result.append(
+            {
+                'name': v['name'],
+                'product_name': v['name'],
+                'unit_price': v['unit_price'],
+                'price': v['unit_price'],
+                'quantity': v['quantity'],
+                'subtotal': subtotal,
+            }
+        )
+    return result
 
 
 @require_POST
@@ -295,8 +333,22 @@ def checkout(request):
             )
 
             # create order and line items atomically
+            # Remember if we're reusing an existing pending order so we can
+            # clear pre-existing line items before recreating them. This
+            # prevents duplicate OrderLineItem rows when a pending order
+            # is reused (e.g. user resubmits the checkout form).
+            reused_order = True if existing_order else False
+
             with transaction.atomic():
                 order.save()  # generate order_number via model save
+
+                # If reusing an existing order, remove any previously
+                # created line items so we can recreate a fresh snapshot.
+                if reused_order:
+                    try:
+                        order.items.all().delete()
+                    except Exception:
+                        pass
 
                 total = Decimal('0.00')
 
@@ -365,21 +417,9 @@ def checkout(request):
             # show the payment form for the created order so the user
             # can enter card details and complete payment.
             # Build summary from the created order's line items
-            summary_items = []
-            summary_total = Decimal('0.00')
-            for li in order.items.all():
-                qty = int(li.quantity)
-                price = Decimal(li.price)
-                subtotal = price * qty
-                summary_items.append(
-                    {
-                        'name': li.product_name,
-                        'quantity': qty,
-                        'unit_price': price,
-                        'subtotal': subtotal,
-                    }
-                )
-                summary_total += subtotal
+            # Aggregate duplicate line items for display (combine same product & price)
+            summary_items = _aggregate_order_items(order.items.all())
+            summary_total = sum((x['subtotal'] for x in summary_items), Decimal('0.00'))
 
             context = {
                 'form': form,
@@ -521,22 +561,9 @@ def resume_checkout(request, order_number):
         messages.error(request, 'Only pending orders can be completed')
         return redirect('profiles:profile' if request.user.is_authenticated else 'checkout:checkout')
 
-    # Build summary items from order line items
-    summary_items = []
-    summary_total = Decimal('0.00')
-    for li in order.items.all():
-        qty = int(li.quantity)
-        price = Decimal(li.price)
-        subtotal = price * qty
-        summary_items.append(
-            {
-                'name': li.product_name,
-                'quantity': qty,
-                'unit_price': price,
-                'subtotal': subtotal,
-            }
-        )
-        summary_total += subtotal
+    # Build aggregated summary items from order line items (combine duplicates)
+    summary_items = _aggregate_order_items(order.items.all())
+    summary_total = sum((x['subtotal'] for x in summary_items), Decimal('0.00'))
 
     # Mark pending order in session for anonymous users
     try:
@@ -579,8 +606,8 @@ def order_detail(request, order_number):
         messages.error(request, 'You must be signed in to view order details')
         return redirect('profiles:profile')
 
-    # Gather line items and optional contact messages
-    items = list(order.items.all())
+    # Gather aggregated line items and optional contact messages
+    items = _aggregate_order_items(order.items.all())
     contact_messages = []
     try:
         from contact.models import ContactMessage
@@ -627,7 +654,9 @@ def checkout_success(request, order_number):
         # page still renders for the user
         pass
 
-    return render(request, 'checkout/checkout_success.html', {'order': order})
+    # Provide aggregated items for the success page as well
+    items = _aggregate_order_items(order.items.all())
+    return render(request, 'checkout/checkout_success.html', {'order': order, 'items': items})
 
 
 @require_POST
