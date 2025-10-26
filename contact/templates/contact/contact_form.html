@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="row mt-4">
+  <div class="col-md-8">
+    <h2>Contact about order {{ order.order_number }}</h2>
+    <p class="text-muted">You may contact us about this order for {{ days_allowed }} days after it was placed.</p>
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {{ form.non_field_errors }}
+      <div class="mb-3">
+        {{ form.subject.label_tag }}
+        {{ form.subject }}
+        {{ form.subject.errors }}
+      </div>
+      <div class="mb-3">
+        {{ form.message.label_tag }}
+        {{ form.message }}
+        {{ form.message.errors }}
+      </div>
+      <button class="btn btn-primary">Send message</button>
+      <a href="{% url 'profiles:profile' %}" class="btn btn-link">Back to profile</a>
+    </form>
+  </div>
+</div>
+{% endblock %}
