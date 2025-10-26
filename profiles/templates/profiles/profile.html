@@ -32,8 +32,10 @@
       <ul class="list-group">
         {% for order in orders %}
           <li class="list-group-item d-flex justify-content-between align-items-center">
-            <div>
-              <strong>Order {{ order.order_number }}</strong>
+              <div>
+              <strong>
+                <a href="{% url 'checkout:order_detail' order.order_number %}">Order {{ order.order_number }}</a>
+              </strong>
               <div class="small text-muted">Placed {{ order.date }}</div>
             </div>
             <div class="text-end">
@@ -111,7 +113,7 @@
                 <strong>{{ msg.subject|default:'(no subject)' }}</strong>
                 <div class="small text-muted">Sent {{ msg.created }}</div>
                 {% if msg.order %}
-                  <div class="small">Order: {{ msg.order.order_number }}</div>
+                  <div class="small">Order: <a href="{% url 'checkout:order_detail' msg.order.order_number %}">{{ msg.order.order_number }}</a></div>
                 {% endif %}
               </div>
               <div class="text-end">

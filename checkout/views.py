@@ -556,6 +556,46 @@ def resume_checkout(request, order_number):
     return render(request, 'checkout/checkout.html', context)
 
 
+def order_detail(request, order_number):
+    """Show a minimal order detail page.
+
+    Only the order owner or staff users may view the page.
+    If the `contact` app is present, show any contact messages
+    associated with the order.
+    """
+    order = get_object_or_404(Order, order_number=order_number)
+
+    # Ownership check: owner or staff may view
+    if request.user.is_authenticated:
+        try:
+            is_owner = order.profile and order.profile.user == request.user
+        except Exception:
+            is_owner = False
+        if not (is_owner or request.user.is_staff):
+            messages.error(request, 'You do not have permission to view that order')
+            return redirect('profiles:profile')
+    else:
+        # disallow anonymous access to order details
+        messages.error(request, 'You must be signed in to view order details')
+        return redirect('profiles:profile')
+
+    # Gather line items and optional contact messages
+    items = list(order.items.all())
+    contact_messages = []
+    try:
+        from contact.models import ContactMessage
+
+        contact_messages = list(ContactMessage.objects.filter(order=order).order_by('-created'))
+    except Exception:
+        contact_messages = []
+
+    return render(
+        request,
+        'checkout/order_detail.html',
+        {'order': order, 'items': items, 'contact_messages': contact_messages},
+    )
+
+
 def checkout_success(request, order_number):
     order = get_object_or_404(Order, order_number=order_number)
     # If the user returned here after a successful payment, clear their

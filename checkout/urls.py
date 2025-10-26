@@ -26,6 +26,7 @@ urlpatterns = [
           name='create_payment_intent',
      ),
      path('resume/<order_number>/', views.resume_checkout, name='resume'),
+     path('order/<order_number>/', views.order_detail, name='order_detail'),
      path(
           'mark-paid/<order_number>/',
           views.mark_order_paid,
