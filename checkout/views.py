@@ -367,82 +367,19 @@ def checkout(request):
                     except Exception:
                         pass
 
-                total = Decimal('0.00')
+                # create line items by copying the user's basket (DB or session)
+                from .utils import transfer_basket_to_order
 
-                # Authenticated users: copy from BasketItem objects
-                if request.user.is_authenticated:
-                    basket_obj, _ = Basket.objects.get_or_create(
-                        user=request.user
-                    )
-                    # Collect unsaved OrderLineItem instances and bulk create
-                    items_to_create = []
-                    for it in basket_obj.items.select_related('content_type'):
-                        qty = int(it.quantity)
-                        price = Decimal(it.price_snapshot)
-                        name = str(it.content_object)
-                        items_to_create.append(
-                            OrderLineItem(
-                                order=order,
-                                product=it.content_object,
-                                product_name=name,
-                                quantity=qty,
-                                price=price,
-                            )
-                        )
-                        total += price * qty
-                    if items_to_create:
-                        OrderLineItem.objects.bulk_create(items_to_create)
-                    # Do not clear the DB basket here. Keep items in
-                    # the user's basket until payment completes so the user
-                    # can recover or retry payment. Will clear the basket
-                    # after successful payment in `checkout_success` or via
-                    # webhook handling.
-                else:
-                    # Session-based anonymous basket format:
-                    # {weight_str: {quantity, price_gbp}}
-                    session_basket = request.session.get('basket', {})
-                    # For anonymous/session basket build items and bulk create
-                    items_to_create = []
-                    for weight_str, data in (session_basket or {}).items():
-                        qty = int(data.get('quantity', 0))
-                        try:
-                            price = Decimal(str(data.get('price_gbp', '0')))
-                        except InvalidOperation:
-                            price = Decimal('0.00')
+                # If reusing an existing pending order, clear previous items so
+                # we can recreate a fresh snapshot from the current basket.
+                if reused_order:
+                    try:
+                        order.items.all().delete()
+                    except Exception:
+                        pass
 
-                        # try to map to a product for a nicer name
-                        name = f"{weight_str} kg kettlebell"
-                        try:
-                            w = Decimal(str(weight_str))
-                            kb = Kettlebell.objects.filter(
-                                weight=w, weight_unit='kg'
-                            ).first()
-                            if kb:
-                                name = str(kb)
-                        except Exception:
-                            pass
-
-                        items_to_create.append(
-                            OrderLineItem(
-                                order=order,
-                                product=kb if kb else None,
-                                product_name=name,
-                                quantity=qty,
-                                price=price,
-                            )
-                        )
-                        total += price * qty
-                    if items_to_create:
-                        OrderLineItem.objects.bulk_create(items_to_create)
-
-                        # Do not clear the session basket here. Keep the
-                        # anonymous user's basket in session until payment
-                        # completes; we'll clear it on `checkout_success` when
-                        # the user returns after payment.
-
-                # persist computed total
-                order.total = total
-                order.save()
+                # Helper will populate OrderLineItem rows and persist order.total
+                transfer_basket_to_order(order, request)
 
             # Order created — render the checkout page again but now
             # show the payment form for the created order so the user

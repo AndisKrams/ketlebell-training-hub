@@ -133,3 +133,106 @@ def apply_order_stock_adjustment(order):
                 'Stock adjust: failed to mark order %s as adjusted',
                 order.order_number,
             )
+
+
+def transfer_basket_to_order(order, request):
+    """Copy current basket (DB or session) into the given Order.
+
+    This helper is atomic and will create OrderLineItem rows using
+    bulk_create for efficiency. It also computes and persists the
+    order.total. The function does not delete the source basket; the
+    caller should remove the basket only after payment/fulfillment.
+    """
+    if order is None or request is None:
+        return
+
+    total = Decimal('0.00')
+    items_to_create = []
+
+    # Authenticated users: copy from DB BasketItems
+    if getattr(request, 'user', None) and request.user.is_authenticated:
+        try:
+            from basket.models import Basket
+            from .models import OrderLineItem
+
+            basket_obj, _ = Basket.objects.get_or_create(user=request.user)
+            # Lock the basket to avoid concurrent checkouts
+            basket_obj = Basket.objects.select_for_update().get(pk=basket_obj.pk)
+            # content_object is a GenericForeignKey and cannot be used with
+            # select_related; iterate the items and access content_object
+            # lazily. This is slightly less efficient but safe and simple.
+            for it in basket_obj.items.select_related('content_type').all():
+                qty = int(it.quantity)
+                price = Decimal(str(it.price_snapshot))
+                # content_object may be None or a related model instance
+                content_obj = getattr(it, 'content_object', None)
+                name = str(content_obj) if content_obj else str(it)
+                items_to_create.append(
+                    OrderLineItem(
+                        order=order,
+                        product=(content_obj if content_obj else None),
+                        product_name=name,
+                        quantity=qty,
+                        price=price,
+                    )
+                )
+                total += price * qty
+        except Exception:
+            # defensive: if anything goes wrong we bail but keep order empty
+            logger.exception(
+                'transfer_basket_to_order: failed copying DB basket'
+            )
+
+    else:
+        # Anonymous/session-based basket
+        try:
+            from .models import OrderLineItem
+
+            session_basket = request.session.get('basket', {}) or {}
+            for weight_str, data in session_basket.items():
+                qty = int(data.get('quantity', 0))
+                try:
+                    price = Decimal(str(data.get('price_gbp', '0')))
+                except Exception:
+                    price = Decimal('0.00')
+
+                # try to map to a product for a nicer name
+                name = f"{weight_str} kg kettlebell"
+                kb = None
+                try:
+                    w = Decimal(str(weight_str))
+                    kb = Kettlebell.objects.filter(
+                        weight=w,
+                        weight_unit='kg',
+                    ).first()
+                    if kb:
+                        name = str(kb)
+                except Exception:
+                    kb = None
+
+                items_to_create.append(
+                    OrderLineItem(
+                        order=order,
+                        product=kb if kb else None,
+                        product_name=name,
+                        quantity=qty,
+                        price=price,
+                    )
+                )
+                total += price * qty
+        except Exception:
+            logger.exception(
+                'transfer_basket_to_order: failed copying session basket'
+            )
+
+    # Persist line items and total inside a transaction
+    try:
+        with transaction.atomic():
+            if items_to_create:
+                OrderLineItem.objects.bulk_create(items_to_create)
+            order.total = total
+            order.save(update_fields=['total'])
+    except Exception:
+        logger.exception(
+            'transfer_basket_to_order: failed creating order line items'
+        )
