@@ -357,17 +357,23 @@ def checkout(request):
                     basket_obj, _ = Basket.objects.get_or_create(
                         user=request.user
                     )
+                    # Collect unsaved OrderLineItem instances and bulk create
+                    items_to_create = []
                     for it in basket_obj.items.select_related('content_type'):
                         qty = int(it.quantity)
                         price = Decimal(it.price_snapshot)
                         name = str(it.content_object)
-                        OrderLineItem.objects.create(
-                            order=order,
-                            product_name=name,
-                            quantity=qty,
-                            price=price,
+                        items_to_create.append(
+                            OrderLineItem(
+                                order=order,
+                                product_name=name,
+                                quantity=qty,
+                                price=price,
+                            )
                         )
                         total += price * qty
+                    if items_to_create:
+                        OrderLineItem.objects.bulk_create(items_to_create)
                     # Do not clear the DB basket here. Keep items in
                     # the user's basket until payment completes so the user
                     # can recover or retry payment. Will clear the basket
@@ -377,6 +383,8 @@ def checkout(request):
                     # Session-based anonymous basket format:
                     # {weight_str: {quantity, price_gbp}}
                     session_basket = request.session.get('basket', {})
+                    # For anonymous/session basket build items and bulk create
+                    items_to_create = []
                     for weight_str, data in (session_basket or {}).items():
                         qty = int(data.get('quantity', 0))
                         try:
@@ -396,13 +404,17 @@ def checkout(request):
                         except Exception:
                             pass
 
-                        OrderLineItem.objects.create(
-                            order=order,
-                            product_name=name,
-                            quantity=qty,
-                            price=price,
+                        items_to_create.append(
+                            OrderLineItem(
+                                order=order,
+                                product_name=name,
+                                quantity=qty,
+                                price=price,
+                            )
                         )
                         total += price * qty
+                    if items_to_create:
+                        OrderLineItem.objects.bulk_create(items_to_create)
 
                         # Do not clear the session basket here. Keep the
                         # anonymous user's basket in session until payment
