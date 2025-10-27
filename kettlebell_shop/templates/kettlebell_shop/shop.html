@@ -13,7 +13,8 @@
   <div id="kettlebell-buttons" class="d-flex flex-row flex-wrap gap-2">
   {% for kb in kettlebells %}
       <button type="button"
-        class="kettlebell-btn btn m-0 p-2 {% if kb.available_stock == 0 %}btn-secondary faded{% else %}btn-outline-dark{% endif %}"
+  class="kettlebell-btn btn m-0 p-2 {% if kb.available_stock == 0 %}btn-secondary faded{% else %}btn-outline-dark{% endif %}"
+  {% if kb.available_stock == 0 %}aria-disabled="true"{% endif %}
         data-weight="{{ kb.product.weight }}"
         data-weight-unit="{{ kb.product.weight_unit }}"
         data-price="{{ kb.product.price_gbp }}"
@@ -23,7 +24,6 @@
     data-bs-html="true"
     title="{% if kb.available_stock > 0 %}Price: £{{ kb.product.price_gbp }}<br>{{ kb.available_stock }} in stock<br><input type='number' min='1' max='{{ kb.available_stock }}' value='1' class='form-control form-control-sm' style='width:70px;display:inline;'> <button class='btn btn-sm btn-secondary'>Add to basket</button>{% else %}<span class='text-danger'>Out of stock</span>{% endif %}">
   {{ kb.product.weight }} {{ kb.product.weight_unit }}
-    {% if kb.available_stock == 0 %}<span class="text-danger"> (Out of stock)</span>{% endif %}
   </button>
   {% endfor %}
       </div>
@@ -38,6 +38,13 @@ document.addEventListener('DOMContentLoaded', function() {
   var details = document.getElementById('kettlebell-details');
   buttons.forEach(function(btn) {
     btn.addEventListener('click', function() {
+      // Respect aria-disabled state for out-of-stock buttons so they
+      // remain hoverable (tooltips) but are not actionable via click.
+      if (btn.getAttribute('aria-disabled') === 'true') {
+        var weight = btn.getAttribute('data-weight');
+        details.innerHTML = `<div class='card p-3'><h5>${weight} ${btn.getAttribute("data-weight-unit") || "kg"}</h5><span class='text-danger'>Out of stock</span></div>`;
+        return;
+      }
       var weight = btn.getAttribute('data-weight');
       var price = btn.getAttribute('data-price');
       var stock = btn.getAttribute('data-stock');
@@ -189,9 +196,11 @@ document.addEventListener('DOMContentLoaded', function() {
       // toggle classes
       if (available === 0) {
         btn.classList.add('btn-secondary','faded');
+        btn.setAttribute('aria-disabled', 'true');
         btn.classList.remove('btn-outline-dark');
       } else {
         btn.classList.remove('btn-secondary','faded');
+        btn.removeAttribute('aria-disabled');
         btn.classList.add('btn-outline-dark');
       }
 
@@ -206,19 +215,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (tip) tip.setContent({'.tooltip-inner': title});
       } catch (e) {}
 
-      // inline out-of-stock indicator inside button
-      var span = btn.querySelector('span.text-danger');
-      if (available === 0) {
-        if (!span) {
-          var s = document.createElement('span');
-          s.className = 'text-danger';
-          s.style.marginLeft = '6px';
-          s.textContent = ' (Out of stock)';
-          btn.appendChild(s);
-        }
-      } else {
-        if (span) span.remove();
-      }
+      // no inline out-of-stock label; tooltip shows availability
     });
   }
 });

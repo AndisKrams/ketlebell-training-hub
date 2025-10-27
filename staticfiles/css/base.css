@@ -13,10 +13,6 @@ main {
   border-color: #6c757d !important;
   color: #fff !important;
 }
-.kettlebell-btn[aria-disabled="true"] {
-  pointer-events: auto; /* allow tooltip hover even when aria-disabled */
-}
-.kettlebell-btn.faded {
-  /* ensure cursor shows non-actionable affordance */
-  cursor: not-allowed;
+.kettlebell-btn[disabled], .kettlebell-btn[aria-disabled="true"] {
+  pointer-events: auto; /* allow tooltip hover even when disabled */
 }
