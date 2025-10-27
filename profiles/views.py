@@ -76,9 +76,14 @@ def profile_view(request):
 
     # Load the user's orders (if any) ordered by date desc, excluding failed
     try:
-        orders = profile.orders.exclude(status=Order.STATUS_FAILED).order_by('-date')
+        # Prefetch order line items to avoid N+1 when rendering order summaries
+        orders = (
+            profile.orders.exclude(status=Order.STATUS_FAILED)
+            .order_by('-date')
+            .prefetch_related('items')
+        )
     except Exception:
-        orders = profile.orders.all().order_by('-date')
+        orders = profile.orders.all().order_by('-date').prefetch_related('items')
 
     # Fetch saved payment methods (masked) from Stripe when available
     payment_methods = _get_saved_payment_methods(profile)
