@@ -1,7 +1,7 @@
 from decimal import Decimal
 import json
 
-from django.test import TestCase, Client
+from django.test import TestCase, Client, override_settings
 from django.urls import reverse
 from django.contrib.auth.models import User
 
@@ -291,3 +291,124 @@ class CheckoutStaleSessionIntegrationTest(TestCase):
         self.assertIn('basket', session)
         self.assertIn('48', session['basket'])
         self.assertEqual(int(session['basket']['48']['quantity']), 1)
+
+
+class CheckoutStockAdjustmentTests(TestCase):
+    """Tests that paid flows decrement product stock and are idempotent.
+
+    Covers both the client-side `mark_order_paid` endpoint and the
+    webhook endpoint (`checkout/wh/`)."""
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username='stock_tester', email='stock@example.com', password='pass'
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+
+        # create a kettlebell product with a known stock
+        self.kb = Kettlebell.objects.create(
+            weight=Decimal('24'),
+            weight_unit='kg',
+            price_gbp=Decimal('70.00'),
+            stock=5,
+        )
+
+    def _create_order_with_line(self, quantity=1, product_name=None):
+        # Create a pending order owned by the test user
+        order = Order.objects.create(
+            profile=self.user.userprofile,
+            full_name='Stock Tester',
+            email='stock@example.com',
+            phone_number='',
+            street_address1='1 Test',
+            town_or_city='City',
+            postcode='PC1',
+            county='',
+            country='UK',
+            total=(self.kb.price_gbp * quantity),
+            paid=False,
+            status=Order.STATUS_PENDING,
+        )
+        name = product_name or str(self.kb)
+        from .models import OrderLineItem
+
+        OrderLineItem.objects.create(
+            order=order,
+            product_name=name,
+            quantity=quantity,
+            price=self.kb.price_gbp,
+        )
+        return order
+
+    def test_mark_order_paid_decrements_stock_and_is_idempotent(self):
+        order = self._create_order_with_line(quantity=2)
+
+        url = reverse('checkout:mark_order_paid', args=[order.order_number])
+        # first call should decrement stock by 2
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, 200)
+        self.kb.refresh_from_db()
+        self.assertEqual(self.kb.stock, 3)
+
+        # second call (idempotent) should not change stock further
+        resp = self.client.post(url)
+        self.assertEqual(resp.status_code, 200)
+        self.kb.refresh_from_db()
+        self.assertEqual(self.kb.stock, 3)
+
+    def test_webhook_decrements_stock_and_is_idempotent(self):
+        order = self._create_order_with_line(quantity=1)
+
+        url = reverse('checkout:webhook')
+        event = {
+            'type': 'checkout.session.completed',
+            'data': {
+                'object': {
+                    'metadata': {'order_number': order.order_number}
+                }
+            },
+        }
+
+        with override_settings(STRIPE_WH_SECRET=''):
+            resp = self.client.post(
+                url, data=json.dumps(event), content_type='application/json'
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.kb.refresh_from_db()
+        self.assertEqual(self.kb.stock, 4)
+
+        # duplicate webhook should not decrement again
+        with override_settings(STRIPE_WH_SECRET=''):
+            resp = self.client.post(
+                url, data=json.dumps(event), content_type='application/json'
+            )
+        self.assertEqual(resp.status_code, 200)
+        self.kb.refresh_from_db()
+        self.assertEqual(self.kb.stock, 4)
+
+    def test_unparsable_product_name_does_not_change_stock(self):
+        # Create an order with a product name the parser cannot read
+        order = self._create_order_with_line(
+            quantity=1, product_name='Some unknown product'
+        )
+        url = reverse('checkout:webhook')
+        event = {
+            'type': 'checkout.session.completed',
+            'data': {
+                'object': {
+                    'metadata': {'order_number': order.order_number}
+                }
+            },
+        }
+
+        with override_settings(STRIPE_WH_SECRET=''):
+            resp = self.client.post(
+                url, data=json.dumps(event), content_type='application/json'
+            )
+        self.assertEqual(resp.status_code, 200)
+        # stock should be unchanged
+        self.kb.refresh_from_db()
+        self.assertEqual(self.kb.stock, 5)
