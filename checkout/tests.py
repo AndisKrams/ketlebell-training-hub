@@ -352,6 +352,9 @@ class CheckoutStockAdjustmentTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.kb.refresh_from_db()
         self.assertEqual(self.kb.stock, 3)
+        # order should be marked adjusted
+        order.refresh_from_db()
+        self.assertTrue(order.stock_adjusted)
 
         # second call (idempotent) should not change stock further
         resp = self.client.post(url)
@@ -379,6 +382,9 @@ class CheckoutStockAdjustmentTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.kb.refresh_from_db()
         self.assertEqual(self.kb.stock, 4)
+
+        order.refresh_from_db()
+        self.assertTrue(order.stock_adjusted)
 
         # duplicate webhook should not decrement again
         with override_settings(STRIPE_WH_SECRET=''):
@@ -412,3 +418,6 @@ class CheckoutStockAdjustmentTests(TestCase):
         # stock should be unchanged
         self.kb.refresh_from_db()
         self.assertEqual(self.kb.stock, 5)
+        # the order should still be marked as adjusted (we attempted adjustment)
+        order.refresh_from_db()
+        self.assertTrue(order.stock_adjusted)
