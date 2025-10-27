@@ -28,6 +28,9 @@ class Order(models.Model):
         max_digits=9, decimal_places=2, default=Decimal('0.00')
     )
     paid = models.BooleanField(default=False)
+    # Whether we've applied stock adjustments for this order's line items.
+    # Used to make stock adjustments idempotent across webhooks/handlers.
+    stock_adjusted = models.BooleanField(default=False)
     STATUS_PENDING = 'pending'
     STATUS_PAID = 'paid'
     STATUS_DISPATCHED = 'dispatched'
@@ -57,6 +60,16 @@ class Order(models.Model):
 class OrderLineItem(models.Model):
     order = models.ForeignKey(
         Order, related_name='items', on_delete=models.CASCADE
+    )
+    # Optional FK to the actual product (Kettlebell). This is nullable
+    # for existing historical orders; a data migration will attempt to
+    # populate this field for current rows.
+    product = models.ForeignKey(
+        'kettlebell_shop.Kettlebell',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='order_line_items',
     )
     product_name = models.CharField(max_length=255)
     quantity = models.PositiveIntegerField(default=1)
