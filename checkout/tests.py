@@ -146,3 +146,79 @@ class CheckoutTests(TestCase):
         # order.profile should reference the user's UserProfile
         self.assertIsNotNone(order.profile)
         self.assertEqual(order.profile.user, user)
+
+
+class CheckoutBulkCreateAdditionalTest(TestCase):
+    """Additional test to verify bulk_create path for authenticated checkout.
+
+    This test mirrors the behavior exercised in the new test file but keeps
+    it inside the existing `checkout/tests.py` module to avoid unittest
+    discovery issues on Windows/packaging.
+    """
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username='tester2', email='t2@example.com', password='pass'
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+
+        # create kettlebells
+        self.k1 = Kettlebell.objects.create(
+            weight=Decimal('32'), weight_unit='kg', price_gbp=Decimal('60.00')
+        )
+        self.k2 = Kettlebell.objects.create(
+            weight=Decimal('20'), weight_unit='kg', price_gbp=Decimal('36.00')
+        )
+
+        # prepare basket
+        self.basket, _ = Basket.objects.get_or_create(user=self.user)
+        self.basket.items.all().delete()
+        BasketItem.objects.create(
+            basket=self.basket,
+            content_object=self.k1,
+            quantity=2,
+            price_snapshot=str(self.k1.price_gbp),
+        )
+        BasketItem.objects.create(
+            basket=self.basket,
+            content_object=self.k2,
+            quantity=1,
+            price_snapshot=str(self.k2.price_gbp),
+        )
+
+    def test_authenticated_checkout_creates_two_line_items_and_total(self):
+        url = reverse('checkout:checkout')
+        data = {
+            'full_name': 'Tester Two',
+            'email': 't2@example.com',
+            'phone_number': '1',
+            'street_address1': 'Addr',
+            'town_or_city': 'City',
+            'postcode': 'PC',
+            'country': 'GB',
+        }
+        resp = self.client.post(url, data)
+        self.assertIn(resp.status_code, (200, 302))
+
+        order_qs = Order.objects.filter(profile__user=self.user).order_by('-date')
+        order = order_qs.first()
+        self.assertIsNotNone(order)
+        items = list(order.items.all())
+        self.assertEqual(len(items), 2)
+
+        # Ensure one line item matches the k1 quantity/price and one matches k2
+        found_k1 = any(
+            i.quantity == 2 and i.price == self.k1.price_gbp for i in items
+        )
+        found_k2 = any(
+            i.quantity == 1 and i.price == self.k2.price_gbp for i in items
+        )
+        self.assertTrue(found_k1)
+        self.assertTrue(found_k2)
+
+        expected_total = (
+            self.k1.price_gbp * 2 + self.k2.price_gbp * 1
+        )
+        self.assertEqual(order.total, expected_total)
