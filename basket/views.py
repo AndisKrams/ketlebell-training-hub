@@ -6,6 +6,9 @@ from django.views.decorators.http import require_POST
 import json
 from kettlebell_shop.models import Kettlebell
 from decimal import Decimal, InvalidOperation
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def _session_basket_to_list(session_basket):
@@ -47,6 +50,40 @@ def update_item(request, item_id):
     if request.method == "POST":
         qty = int(request.POST.get("quantity", 0))
         if qty <= 0:
+            # capture product weight to keep session basket in sync
+            try:
+                product = item.content_object
+                weight = getattr(product, 'weight', None)
+                if weight is not None:
+                    # normalize key used by session (strip trailing zeros)
+                    weight_str = str(weight)
+                    if '.' in weight_str:
+                        weight_key = weight_str.rstrip('0').rstrip('.')
+                    else:
+                        weight_key = weight_str
+                    if (request.session.get('basket') and
+                            weight_key in request.session['basket']):
+                        # log removal so we can correlate checkout removals
+                        # with session
+                        try:
+                            logger.info(
+                                'basket.update_item: removing item -> '
+                                'user=%s item_id=%s weight=%s '
+                                'session_before=%s',
+                                getattr(request.user, 'pk', None),
+                                item.id,
+                                weight_key,
+                                request.session.get('basket', {}),
+                            )
+                        except Exception:
+                            logger.exception(
+                                'basket.update_item: failed to log removal'
+                            )
+
+                        request.session['basket'].pop(weight_key, None)
+                        request.session.modified = True
+            except Exception:
+                pass
             item.delete()
         else:
             item.quantity = qty
@@ -151,7 +188,27 @@ def clear_basket_api(request):
     if request.user.is_authenticated:
         basket_obj, _ = Basket.objects.get_or_create(user=request.user)
         # delete all BasketItem rows for this basket
+        # log what we're about to delete
+        try:
+            logger.info(
+                'clear_basket_api: clearing basket -> user=%s db_items=%s '
+                'session_before=%s',
+                getattr(request.user, 'pk', None),
+                list(basket_obj.items.values_list('id', flat=True)),
+                request.session.get('basket', {}),
+            )
+        except Exception:
+            logger.exception('clear_basket_api: failed to log basket clear')
+
         basket_obj.items.all().delete()
+    # Also clear any session-backed basket entries to avoid
+    # stale reservations
+        if request.session.get('basket'):
+            try:
+                del request.session['basket']
+                request.session.modified = True
+            except Exception:
+                pass
     else:
         # clear session basket
         if request.session.get('basket'):
@@ -189,6 +246,20 @@ def basket_update_api(request):
             product = None
 
         if qty <= 0:
+            # log deletion so we can correlate with session changes
+            try:
+                logger.info(
+                    'basket_update_api: deleting item -> user=%s '
+                    'item_id=%s session_before=%s',
+                    getattr(request.user, 'pk', None),
+                    item.id,
+                    request.session.get('basket', {}),
+                )
+            except Exception:
+                logger.exception(
+                    'basket_update_api: failed to log deletion'
+                )
+
             item.delete()
         else:
             if product and hasattr(product, 'stock') and qty > product.stock:
@@ -214,6 +285,19 @@ def basket_update_api(request):
             kb = None
 
         if qty <= 0:
+            # Log session removal
+            try:
+                logger.info(
+                    'basket_update_api(anon): removing session weight -> '
+                    'weight=%s session_before=%s',
+                    weight,
+                    request.session.get('basket', {}),
+                )
+            except Exception:
+                logger.exception(
+                    'basket_update_api: failed to log anon removal'
+                )
+
             session_basket.pop(weight, None)
         else:
             if kb and qty > kb.stock:

@@ -654,6 +654,29 @@ def checkout_success(request, order_number):
                     basket_obj.items.all().delete()
                 except Basket.DoesNotExist:
                     pass
+                # Also clear any matching entries in the session basket to
+                # avoid leaving stale reservations that would block re-adding
+                try:
+                    orig = json.loads(order.original_basket or '{}')
+                    if orig and request.session.get('basket'):
+                        # If the orig snapshot exactly matches session, clear it
+                        if orig == request.session.get('basket'):
+                            del request.session['basket']
+                            request.session.modified = True
+                        else:
+                            # Otherwise attempt to remove keys present in the orig
+                            sess = request.session.get('basket', {})
+                            removed = False
+                            for k in (orig.keys() if isinstance(orig, dict) else []):
+                                if k in sess:
+                                    sess.pop(k, None)
+                                    removed = True
+                            if removed:
+                                request.session['basket'] = sess
+                                request.session.modified = True
+                except Exception:
+                    # don't block cancel flow on session cleanup errors
+                    pass
         else:
             try:
                 orig = json.loads(order.original_basket or '{}')

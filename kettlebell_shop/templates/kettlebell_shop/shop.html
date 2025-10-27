@@ -10,21 +10,22 @@
       <img src="{% static 'img/kettlebell.png' %}" alt="Kettlebell" class="img-fluid">
     </div>
     <div class="col-12 col-md-6">
-      <div id="kettlebell-buttons" class="d-flex flex-row flex-wrap gap-2">
-      {% for kettlebell in kettlebells %}
+  <div id="kettlebell-buttons" class="d-flex flex-row flex-wrap gap-2">
+  {% for kb in kettlebells %}
       <button type="button"
-        class="kettlebell-btn btn m-0 p-2 {% if kettlebell.stock == 0 %}btn-secondary faded{% else %}btn-outline-dark{% endif %}"
-        data-weight="{{ kettlebell.weight }}"
-        data-weight-unit="{{ kettlebell.weight_unit }}"
-        data-price="{{ kettlebell.price_gbp }}"
-        data-stock="{{ kettlebell.stock }}"
-        data-bs-toggle="tooltip"
-        data-bs-html="true"
-        title="{% if kettlebell.stock > 0 %}Price: £{{ kettlebell.price_gbp }}<br>{{ kettlebell.stock }} in stock<br><input type='number' min='1' max='{{ kettlebell.stock }}' value='1' class='form-control form-control-sm' style='width:70px;display:inline;'> <button class='btn btn-sm btn-secondary'>Add to basket</button>{% else %}<span class='text-danger'>Out of stock</span>{% endif %}">
-  {{ kettlebell.weight }} {{ kettlebell.weight_unit }}
-        {% if kettlebell.stock == 0 %}<span class="text-danger"> (Out of stock)</span>{% endif %}
-      </button>
-      {% endfor %}
+        class="kettlebell-btn btn m-0 p-2 {% if kb.available_stock == 0 %}btn-secondary faded{% else %}btn-outline-dark{% endif %}"
+        data-weight="{{ kb.product.weight }}"
+        data-weight-unit="{{ kb.product.weight_unit }}"
+        data-price="{{ kb.product.price_gbp }}"
+        data-stock="{{ kb.available_stock }}"
+        data-original-stock="{{ kb.product.stock }}"
+    data-bs-toggle="tooltip"
+    data-bs-html="true"
+    title="{% if kb.available_stock > 0 %}Price: £{{ kb.product.price_gbp }}<br>{{ kb.available_stock }} in stock<br><input type='number' min='1' max='{{ kb.available_stock }}' value='1' class='form-control form-control-sm' style='width:70px;display:inline;'> <button class='btn btn-sm btn-secondary'>Add to basket</button>{% else %}<span class='text-danger'>Out of stock</span>{% endif %}">
+  {{ kb.product.weight }} {{ kb.product.weight_unit }}
+    {% if kb.available_stock == 0 %}<span class="text-danger"> (Out of stock)</span>{% endif %}
+  </button>
+  {% endfor %}
       </div>
       <div id="kettlebell-details" class="mt-3"></div>
     </div>
@@ -67,7 +68,15 @@ document.addEventListener('DOMContentLoaded', function() {
               'X-CSRFToken': csrftoken,
             },
             body: JSON.stringify({weight: String(weight), unit: unit, quantity: qty})
-          }).then(function(res){return res.json();}).then(function(data){
+          }).then(function(res){
+            if (!res.ok) {
+              return res.text().then(function(text){
+                details.innerHTML = `<div class='alert alert-danger'>Server error ${res.status}: ${text || res.statusText}</div>`;
+                throw new Error('server');
+              });
+            }
+            return res.json();
+          }).then(function(data){
             if (data.ok) {
               try { window.showGlobalToast(`Added ${qty} x ${weight} ${unit} to basket`, 'success'); } catch (e) {}
               // clear the details area after showing toast to avoid stale inline messages
@@ -102,8 +111,9 @@ document.addEventListener('DOMContentLoaded', function() {
             } else {
               details.innerHTML = `<div class='alert alert-danger'>${data.error || 'Could not add to basket'}</div>`;
             }
-          }).catch(function(){
-            details.innerHTML = `<div class='alert alert-danger'>Network error</div>`;
+          }).catch(function(err){
+            console.error('Add to basket error', err);
+            details.innerHTML = `<div class='alert alert-danger'>Network or server error — please try again</div>`;
           });
         });
       } else {
@@ -128,6 +138,8 @@ document.addEventListener('DOMContentLoaded', function() {
           const badge = document.getElementById('basket-count');
           if (badge) badge.textContent = data.count;
         }
+        // Update button stock states based on current basket contents
+        try { updateButtonsFromBasket(data); } catch (e) {}
       }).catch(()=>{});
   })();
   // Clear the per-item add message when the basket updates elsewhere
@@ -145,10 +157,70 @@ document.addEventListener('DOMContentLoaded', function() {
         if (details) details.innerHTML = '';
         try { window.showGlobalToast('Basket emptied', 'success'); } catch (e) {}
       }
+      // Re-fetch basket contents and update button availability
+      fetch('{% url "basket:api_contents" %}')
+        .then(r => r.json())
+        .then(function(data){ try { updateButtonsFromBasket(data); } catch(e){} })
+        .catch(()=>{});
     } catch (err) {
       // ignore
     }
   });
+
+  // Update button stock/class/tooltip from basket API data
+  function updateButtonsFromBasket(data) {
+    var items = (data && data.items) ? data.items : [];
+    // build weight->quantity map
+    var qtyMap = {};
+    items.forEach(function(it){
+      var w = String(it.weight);
+      var q = Number(it.quantity || 0);
+      qtyMap[w] = (qtyMap[w] || 0) + q;
+    });
+
+    buttons.forEach(function(btn){
+      var weight = btn.getAttribute('data-weight');
+      var orig = Number(btn.getAttribute('data-original-stock') || btn.getAttribute('data-stock') || 0);
+      var reserved = Number(qtyMap[weight] || 0);
+      var available = orig - reserved;
+      if (available < 0) available = 0;
+      btn.setAttribute('data-stock', String(available));
+
+      // toggle classes
+      if (available === 0) {
+        btn.classList.add('btn-secondary','faded');
+        btn.classList.remove('btn-outline-dark');
+      } else {
+        btn.classList.remove('btn-secondary','faded');
+        btn.classList.add('btn-outline-dark');
+      }
+
+      // update tooltip content
+      var price = btn.getAttribute('data-price');
+      var title = available > 0 ?
+        "Price: £" + price + "<br>" + available + " in stock<br><input type='number' min='1' max='" + available + "' value='1' class='form-control form-control-sm' style='width:70px;display:inline;'> <button class='btn btn-sm btn-secondary'>Add to basket</button>"
+        : "<span class='text-danger'>Out of stock</span>";
+      btn.setAttribute('title', title);
+      try {
+        var tip = bootstrap.Tooltip.getInstance(btn);
+        if (tip) tip.setContent({'.tooltip-inner': title});
+      } catch (e) {}
+
+      // inline out-of-stock indicator inside button
+      var span = btn.querySelector('span.text-danger');
+      if (available === 0) {
+        if (!span) {
+          var s = document.createElement('span');
+          s.className = 'text-danger';
+          s.style.marginLeft = '6px';
+          s.textContent = ' (Out of stock)';
+          btn.appendChild(s);
+        }
+      } else {
+        if (span) span.remove();
+      }
+    });
+  }
 });
 </script>
 {% endblock %}
