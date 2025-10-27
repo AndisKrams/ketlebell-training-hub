@@ -58,9 +58,29 @@
 
         function renderContents(data) {
             const container = document.getElementById('basket-contents');
+            const checkoutBtn = document.getElementById('go-to-checkout');
+            const updateBtn = document.getElementById('update-all');
+            const emptyBtn = document.getElementById('empty-basket');
+
             if (!data.items || data.items.length === 0) {
                 container.innerHTML = '<p>Your basket is empty.</p>';
+                // hide/disable footer actions that shouldn't be available when empty
+                try {
+                    if (checkoutBtn) checkoutBtn.style.display = 'none';
+                    if (updateBtn) updateBtn.disabled = true;
+                    if (emptyBtn) emptyBtn.disabled = true;
+                } catch (e) {
+                    // ignore DOM errors
+                }
                 return;
+            }
+            // when items exist, ensure footer actions are visible/enabled
+            try {
+                if (checkoutBtn) checkoutBtn.style.display = '';
+                if (updateBtn) updateBtn.disabled = false;
+                if (emptyBtn) emptyBtn.disabled = false;
+            } catch (e) {
+                // ignore
             }
             let html = '<div class="list-group">';
             data.items.forEach(it => {
