@@ -48,27 +48,63 @@ def apply_order_stock_adjustment(order):
     if not order:
         return
 
+    # If we've already applied stock adjustments for this order, skip.
+    try:
+        if getattr(order, 'stock_adjusted', False):
+            logger.info(
+                'Stock adjust: already applied for order %s',
+                order.order_number,
+            )
+            return
+    except Exception:
+        # If the attribute isn't present (older DB state), continue and
+        # allow the migration to set the field later.
+        pass
+
     with transaction.atomic():
-        for li in order.items.select_related():
-            name = (li.product_name or '').strip()
-            weight, unit = _parse_weight_unit_from_name(name)
-            if weight is None:
-                logger.warning('Stock adjust: could not parse product from "%s"', name)
+        # select_related product to avoid extra queries when present
+        for li in order.items.select_related('product'):
+            qty = int(li.quantity or 0)
+            if qty <= 0:
+                continue
+
+            kb = None
+            # Prefer explicit FK when available
+            if getattr(li, 'product', None) is not None:
+                try:
+                    kb = (
+                        Kettlebell.objects.select_for_update()
+                        .filter(pk=li.product_id)
+                        .first()
+                    )
+                except Exception:
+                    kb = None
+
+            # Fallback to parsing product_name for older rows
+            if kb is None:
+                name = (li.product_name or '').strip()
+                weight, unit = _parse_weight_unit_from_name(name)
+                if weight is None:
+                    logger.warning(
+                        'Stock adjust: could not parse product from "%s"', name
+                    )
+                    continue
+                try:
+                    kb = Kettlebell.objects.select_for_update().filter(
+                        weight=weight, weight_unit=unit
+                    ).first()
+                except Exception:
+                    kb = None
+
+            if not kb:
+                logger.warning(
+                    'Stock adjust: product not found for lineitem %s (order=%s)',
+                    getattr(li, 'id', '<unknown>'),
+                    order.order_number,
+                )
                 continue
 
             try:
-                kb = Kettlebell.objects.select_for_update().filter(
-                    weight=weight, weight_unit=unit
-                ).first()
-                if not kb:
-                    logger.warning('Stock adjust: product not found for %s %s', weight, unit)
-                    continue
-
-                qty = int(li.quantity or 0)
-                if qty <= 0:
-                    continue
-
-                before = kb.stock
                 # Decrement but never go negative
                 kb.stock = max(0, int(kb.stock) - qty)
                 kb.save()
@@ -80,4 +116,20 @@ def apply_order_stock_adjustment(order):
                     order.order_number,
                 )
             except Exception:
-                logger.exception('Stock adjust: failed for order %s lineitem %s', order.order_number, li.id)
+                logger.exception(
+                    'Stock adjust: failed updating stock for order %s lineitem %s',
+                    order.order_number,
+                    getattr(li, 'id', '<unknown>'),
+                )
+
+        # Mark order as adjusted so repeated handlers/webhooks don't
+        # decrement stock again. This write is inside the same
+        # transaction to keep operations atomic.
+        try:
+            order.stock_adjusted = True
+            order.save(update_fields=['stock_adjusted'])
+        except Exception:
+            logger.exception(
+                'Stock adjust: failed to mark order %s as adjusted',
+                order.order_number,
+            )

@@ -49,12 +49,14 @@ def webhook(request):
                 # Mark order as paid and update status so the user sees
                 # it as awaiting delivery in their profile.
                 # Only apply stock adjustments when transitioning to paid
-                previously_paid = order.status == Order.STATUS_PAID
                 order.paid = True
                 order.status = Order.STATUS_PAID
                 order.save()
 
-                if not previously_paid:
+                # Apply stock adjustments only if we haven't done so for
+                # this order yet. The helper itself is defensive, but
+                # checking the flag avoids unnecessary work.
+                if not getattr(order, 'stock_adjusted', False):
                     try:
                         from .utils import apply_order_stock_adjustment
 

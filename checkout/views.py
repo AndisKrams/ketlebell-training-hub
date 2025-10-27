@@ -44,12 +44,13 @@ def mark_order_paid(request, order_number):
             return JsonResponse({'ok': False, 'error': 'Permission denied'}, status=403)
 
     # mark paid and status
-    previously_paid = order.status == Order.STATUS_PAID
     order.paid = True
     order.status = Order.STATUS_PAID
     order.save()
 
-    if not previously_paid:
+    # Apply stock adjustments if we haven't already for this order. The
+    # helper is defensive, but checking the flag avoids extra work.
+    if not getattr(order, 'stock_adjusted', False):
         try:
             from .utils import apply_order_stock_adjustment
 
@@ -382,6 +383,7 @@ def checkout(request):
                         items_to_create.append(
                             OrderLineItem(
                                 order=order,
+                                product=it.content_object,
                                 product_name=name,
                                 quantity=qty,
                                 price=price,
@@ -423,6 +425,7 @@ def checkout(request):
                         items_to_create.append(
                             OrderLineItem(
                                 order=order,
+                                product=kb if kb else None,
                                 product_name=name,
                                 quantity=qty,
                                 price=price,
