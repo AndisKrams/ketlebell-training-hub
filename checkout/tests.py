@@ -222,3 +222,72 @@ class CheckoutBulkCreateAdditionalTest(TestCase):
             self.k1.price_gbp * 2 + self.k2.price_gbp * 1
         )
         self.assertEqual(order.total, expected_total)
+
+
+class CheckoutStaleSessionIntegrationTest(TestCase):
+    """Integration test that reproduces the stale-session removal flow.
+
+    Scenario:
+    - Authenticated user has a session 'basket' entry but no DB BasketItem
+      (simulates a removal flow that cleared DB but left session behind).
+    - User posts to `add_to_basket` to add 1 unit of a product with stock=1.
+    - The code should detect the stale session entry, remove it, and
+      allow the add to proceed (creating a DB BasketItem and updating
+      session), instead of rejecting with "Requested quantity exceeds stock".
+    """
+
+    def setUp(self):
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        self.user = User.objects.create_user(
+            username='stale_tester', email='stale@example.com', password='pass'
+        )
+        self.client = Client()
+        self.client.force_login(self.user)
+
+        # Create a product with stock 1
+        self.kb = Kettlebell.objects.create(
+            weight=Decimal('48'),
+            weight_unit='kg',
+            price_gbp=Decimal('82.00'),
+            stock=1,
+        )
+
+        # Ensure user's DB basket has no items
+        from basket.models import Basket
+
+        self.basket_obj, _ = Basket.objects.get_or_create(user=self.user)
+        self.basket_obj.items.all().delete()
+
+        # Simulate stale session reservation: session has quantity 1
+        session = self.client.session
+        session['basket'] = {
+            '48': {'quantity': 1, 'price_gbp': str(self.kb.price_gbp)}
+        }
+        session.save()
+
+    def test_readd_after_stale_session_allows_add(self):
+        url = reverse('add_to_basket')
+        payload = {'weight': 48, 'quantity': 1, 'unit': 'kg'}
+        resp = self.client.post(
+            url, data=json.dumps(payload), content_type='application/json'
+        )
+
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()
+        # Add should succeed (ok=True) and create a BasketItem
+        self.assertTrue(data.get('ok'))
+
+        # DB should now have a BasketItem for this product
+        from basket.models import BasketItem
+
+        bi_exists = BasketItem.objects.filter(
+            basket=self.basket_obj, object_id=self.kb.id
+        ).exists()
+        self.assertTrue(bi_exists)
+
+        # Session should reflect the current basket qty (1)
+        session = self.client.session
+        self.assertIn('basket', session)
+        self.assertIn('48', session['basket'])
+        self.assertEqual(int(session['basket']['48']['quantity']), 1)
