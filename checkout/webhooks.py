@@ -48,9 +48,22 @@ def webhook(request):
                 order = Order.objects.get(order_number=order_number)
                 # Mark order as paid and update status so the user sees
                 # it as awaiting delivery in their profile.
+                # Only apply stock adjustments when transitioning to paid
+                previously_paid = order.status == Order.STATUS_PAID
                 order.paid = True
                 order.status = Order.STATUS_PAID
                 order.save()
+
+                if not previously_paid:
+                    try:
+                        from .utils import apply_order_stock_adjustment
+
+                        apply_order_stock_adjustment(order)
+                    except Exception:
+                        logger.exception(
+                            'Failed to apply stock adjustments for order %s',
+                            order_number,
+                        )
 
                 # Clear DB basket for authenticated owner if present
                 try:

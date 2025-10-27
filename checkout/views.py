@@ -44,9 +44,23 @@ def mark_order_paid(request, order_number):
             return JsonResponse({'ok': False, 'error': 'Permission denied'}, status=403)
 
     # mark paid and status
+    previously_paid = order.status == Order.STATUS_PAID
     order.paid = True
     order.status = Order.STATUS_PAID
     order.save()
+
+    if not previously_paid:
+        try:
+            from .utils import apply_order_stock_adjustment
+
+            apply_order_stock_adjustment(order)
+        except Exception:
+            # Log but don't fail the request
+            import logging
+
+            logging.getLogger(__name__).exception(
+                'Failed to apply stock adjustments for order %s', order_number
+            )
 
     # clear pending marker from session
     if request.session.get('pending_order_number') == order_number:
