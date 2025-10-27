@@ -176,48 +176,7 @@ STRIPE_CURRENCY = "gbp"
 STRIPE_PUBLIC_KEY = os.getenv("STRIPE_PUBLIC_KEY", "")
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WH_SECRET = os.getenv("STRIPE_WH_SECRET", "")
-# Simple file logging for local development to capture diagnostics
-# Logs are written to <BASE_DIR>/logs/dev.log
-LOG_DIR = BASE_DIR / "logs"
-try:
-    LOG_DIR.mkdir(parents=True, exist_ok=True)
-except Exception:
-    # best-effort; don't crash settings if log dir can't be created
-    pass
-LOGGING = {
-    "version": 1,
-    "disable_existing_loggers": False,
-    "formatters": {
-        "verbose": {
-            "format": "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
-        }
-    },
-    "handlers": {
-        "console": {
-            "class": "logging.StreamHandler",
-            "formatter": "verbose",
-        },
-    },
-    "root": {
-        "handlers": ["console"],
-        "level": "DEBUG" if DEBUG else "INFO",
-    },
-}
 
-# Only enable a rotating file handler in local debug mode
-if DEBUG:
-    try:
-        LOGGING["handlers"]["file"] = {
-            "class": "logging.handlers.RotatingFileHandler",
-            "filename": str(LOG_DIR / "dev.log"),
-            "formatter": "verbose",
-            "maxBytes": 10 * 1024 * 1024,
-            "backupCount": 5,
-        }
-        LOGGING["root"]["handlers"].append("file")
-    except Exception:
-        # best-effort; don't fail settings if file handler can't be added
-        pass
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
 
