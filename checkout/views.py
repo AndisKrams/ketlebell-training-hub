@@ -83,7 +83,8 @@ def create_checkout_session(request, order_number):
 
     stripe.api_key = settings.STRIPE_SECRET_KEY
 
-    order = get_object_or_404(Order, order_number=order_number)
+    qs = Order.objects.select_related('profile').prefetch_related('items')
+    order = get_object_or_404(qs, order_number=order_number)
 
     # Build Stripe line items from order items
     stripe_items = []
@@ -175,7 +176,8 @@ def create_payment_intent(request, order_number):
     except Exception:
         return JsonResponse({'error': 'Stripe library not installed'}, status=500)
 
-    order = get_object_or_404(Order, order_number=order_number)
+    qs = Order.objects.select_related('profile').prefetch_related('items')
+    order = get_object_or_404(qs, order_number=order_number)
 
     try:
         body = json.loads(request.body.decode('utf-8'))
@@ -551,7 +553,8 @@ def resume_checkout(request, order_number):
     Ownership: authenticated user must own the order, or anonymous users
     must have the matching pending_order_number in session.
     """
-    order = get_object_or_404(Order, order_number=order_number)
+    qs = Order.objects.select_related('profile').prefetch_related('items')
+    order = get_object_or_404(qs, order_number=order_number)
 
     # Ownership / session check
     if request.user.is_authenticated:
@@ -602,7 +605,8 @@ def order_detail(request, order_number):
     If the `contact` app is present, show any contact messages
     associated with the order.
     """
-    order = get_object_or_404(Order, order_number=order_number)
+    qs = Order.objects.select_related('profile').prefetch_related('items')
+    order = get_object_or_404(qs, order_number=order_number)
 
     # Ownership check: owner or staff may view
     if request.user.is_authenticated:
