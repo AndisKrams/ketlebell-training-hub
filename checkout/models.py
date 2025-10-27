@@ -61,9 +61,7 @@ class OrderLineItem(models.Model):
     order = models.ForeignKey(
         Order, related_name='items', on_delete=models.CASCADE
     )
-    # Optional FK to the actual product (Kettlebell). This is nullable
-    # for existing historical orders; a data migration will attempt to
-    # populate this field for current rows.
+    # Optional FK to the actual product (Kettlebell).
     product = models.ForeignKey(
         'kettlebell_shop.Kettlebell',
         null=True,
