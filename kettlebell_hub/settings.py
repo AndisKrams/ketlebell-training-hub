@@ -171,12 +171,10 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 if not DEBUG:
-    # Use the manifest storage in production so files are cached with
-    # content-hashed names. During development/tests keep default storage to
-    # avoid ManifestMissing errors when collectstatic hasn't been run.
-    STATICFILES_STORAGE = (
-        "whitenoise.storage.CompressedManifestStaticFilesStorage"
-    )
+    # Use WhiteNoise storage for static files in production
+    # CompressedStaticFilesStorage compresses but doesn't enforce manifest
+    # which prevents collectstatic failures on Heroku
+    STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 
 # Stripe
 STRIPE_CURRENCY = "gbp"
