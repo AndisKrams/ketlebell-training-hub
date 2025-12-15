@@ -36,8 +36,6 @@ ALLOWED_HOSTS = [
     "localhost",
 ]
 
-# Static files (CSS, JavaScript, Images)
-STATIC_ROOT = BASE_DIR / "staticfiles"
 # Application definition
 
 INSTALLED_APPS = [
