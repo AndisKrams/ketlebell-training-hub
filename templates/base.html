@@ -5,10 +5,17 @@
 
 <head>
     {% block meta %}
-    <meta http-equiv="X-UA-Compatible" content="ie=edge">
     <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="SimplyKettlebells - Quality kettlebells for your fitness training">
+    <meta name="theme-color" content="#000000">
     {% endblock %}
+
+    <!-- Preconnect to external domains -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+    <link rel="preconnect" href="https://kit.fontawesome.com" crossorigin>
+    <link rel="preconnect" href="https://js.stripe.com" crossorigin>
 
     {% block extra_meta %}
     {% endblock %}
@@ -22,19 +29,15 @@
     {% block extra_css %}
     {% endblock %}
 
-    {% block corejs %}
-    <script src="https://kit.fontawesome.com/732de80570.js" crossorigin="anonymous"></script>
+    <title>SimplyKettlebells {% block extra_title %}{% endblock %}</title>
+    
+    <!-- Load Bootstrap JS in head to ensure it's available before toast script -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"
         integrity="sha384-FKyoEForCGlyvwx9Hj09JcYn3nv7wiPVlz7YYwJrWVcXK/BmnVDxM+D2scQbITxI"
         crossorigin="anonymous"></script>
-    <!-- Stripe -->
-    <script src="https://js.stripe.com/v3/"></script>
-    {% endblock %}
 
-    {% block extra_js %}
+    {% block corejs %}
     {% endblock %}
-
-    <title>SimplyKettlebells {% block extra_title %}{% endblock %}</title>
 </head>
 
 <body>
@@ -53,30 +56,55 @@
 
     <script>
     // Helper to show a bootstrap toast with a short message
-    window.showGlobalToast = function(message, type='success', timeout=4000) {
-        try {
-            const container = document.getElementById('global-toasts');
-            if (!container) return;
-            const toastId = 'toast-' + Date.now();
-            const toastHtml = `
-                <div id="${toastId}" class="toast align-items-center text-bg-${type} border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true">
-                  <div class="d-flex">
-                    <div class="toast-body">${message}</div>
-                    <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
-                  </div>
-                </div>`;
-            const wrapper = document.createElement('div');
-            wrapper.innerHTML = toastHtml;
-            const node = wrapper.firstElementChild;
-            container.appendChild(node);
-            const bsToast = new bootstrap.Toast(node, { delay: timeout });
-            bsToast.show();
-            node.addEventListener('hidden.bs.toast', function () { node.remove(); });
-        } catch (e) {
-            console.error('showGlobalToast error', e);
-        }
-    };
+    (function() {
+        'use strict';
+        
+        window.showGlobalToast = function(message, type, timeout) {
+            type = type || 'success';
+            timeout = timeout || 4000;
+            
+            try {
+                const container = document.getElementById('global-toasts');
+                if (!container) {
+                    console.warn('Toast container not found');
+                    return;
+                }
+                
+                const toastId = 'toast-' + Date.now();
+                const toastHtml = '<div id="' + toastId + '" class="toast align-items-center text-bg-' + type + ' border-0 mb-2" role="alert" aria-live="assertive" aria-atomic="true">' +
+                  '<div class="d-flex">' +
+                    '<div class="toast-body">' + message + '</div>' +
+                    '<button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>' +
+                  '</div>' +
+                '</div>';
+                
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = toastHtml;
+                const node = wrapper.firstElementChild;
+                container.appendChild(node);
+                
+                if (typeof bootstrap !== 'undefined' && bootstrap.Toast) {
+                    const bsToast = new bootstrap.Toast(node, { delay: timeout });
+                    bsToast.show();
+                    node.addEventListener('hidden.bs.toast', function () { 
+                        node.remove(); 
+                    });
+                } else {
+                    console.error('Bootstrap not loaded');
+                }
+            } catch (e) {
+                console.error('showGlobalToast error:', e);
+            }
+        };
+    })();
     </script>
+
+    <!-- Non-critical scripts loaded at end -->
+    <script src="https://kit.fontawesome.com/732de80570.js" crossorigin="anonymous" defer></script>
+    <script src="https://js.stripe.com/v3/" defer></script>
+    
+    {% block extra_js %}
+    {% endblock %}
 
 </body>
 

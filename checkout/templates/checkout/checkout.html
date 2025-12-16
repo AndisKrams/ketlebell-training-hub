@@ -70,9 +70,12 @@
     </form>
   </div>
   {% if payment_required %}
-    <script src="https://js.stripe.com/v3/"></script>
     <script>
       document.addEventListener('DOMContentLoaded', function () {
+        if (typeof Stripe === 'undefined') {
+          console.error('Stripe not loaded');
+          return;
+        }
         const stripe = Stripe("{{ stripe_public_key }}");
         const elements = stripe.elements();
         const card = elements.create('card');
