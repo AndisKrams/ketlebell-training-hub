@@ -43,7 +43,7 @@ if not DEBUG:
     CSRF_COOKIE_SECURE = True
     SECURE_BROWSER_XSS_FILTER = True
     SECURE_CONTENT_TYPE_NOSNIFF = True
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
 # Application definition
 
@@ -183,6 +183,73 @@ STRIPE_CURRENCY = "gbp"
 STRIPE_PUBLIC_KEY = os.getenv("STRIPE_PUBLIC_KEY", "")
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY", "")
 STRIPE_WH_SECRET = os.getenv("STRIPE_WH_SECRET", "")
+
+# Logging
+#
+# Production-friendly logging that writes to stdout/stderr (Heroku-style),
+# with levels configurable via environment variables. Defaults to INFO in
+# production and DEBUG in development.
+LOG_LEVEL = os.getenv("LOG_LEVEL", "DEBUG" if DEBUG else "INFO")
+DJANGO_LOG_LEVEL = os.getenv("DJANGO_LOG_LEVEL", LOG_LEVEL)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "formatters": {
+        "simple": {
+            "format": "%(asctime)s %(levelname)s %(name)s:%(lineno)d - %(message)s",
+        },
+    },
+    "handlers": {
+        # App and info-level logs to stdout
+        "console": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stdout",
+            "formatter": "simple",
+        },
+        # Warnings/errors for Django internals to stderr
+        "console_err": {
+            "class": "logging.StreamHandler",
+            "stream": "ext://sys.stderr",
+            "formatter": "simple",
+        },
+    },
+    "loggers": {
+        # Django core
+        "django": {
+            "handlers": ["console"],
+            "level": DJANGO_LOG_LEVEL,
+            "propagate": False,
+        },
+        "django.request": {
+            "handlers": ["console_err"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        "django.security": {
+            "handlers": ["console_err"],
+            "level": "WARNING",
+            "propagate": False,
+        },
+        # Gunicorn (if used) — let it flow through to default handlers
+        "gunicorn": {"level": LOG_LEVEL, "handlers": ["console"], "propagate": False},
+        "gunicorn.error": {
+            "level": "WARNING",
+            "handlers": ["console_err"],
+            "propagate": False,
+        },
+        # Project apps
+        "kettlebell_shop": {
+            "handlers": ["console"],
+            "level": LOG_LEVEL,
+            "propagate": False,
+        },
+        "basket": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        "checkout": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        "profiles": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+        "contact": {"handlers": ["console"], "level": LOG_LEVEL, "propagate": False},
+    },
+}
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
