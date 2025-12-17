@@ -3,6 +3,7 @@ import logging
 
 from django.http import HttpResponse
 from django.conf import settings
+from django.views.decorators.csrf import csrf_exempt
 
 from .models import Order
 from basket.models import Basket
@@ -11,6 +12,7 @@ from basket.models import Basket
 logger = logging.getLogger(__name__)
 
 
+@csrf_exempt
 def webhook(request):
     """Handle Stripe webhook events.
 
