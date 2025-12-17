@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+
+{% block extra_title %}Server Error{% endblock %}
+
+{% block content %}
+<section class="py-5" aria-labelledby="error-title">
+  <div class="row justify-content-center">
+    <div class="col-lg-8 col-xl-7">
+      <div class="card border-0 shadow-sm">
+        <div class="card-body p-4 p-md-5">
+          <h1 id="error-title" class="h3 mb-3">Something went wrong</h1>
+          <p class="text-muted">Sorry, an unexpected error occurred. Please try again shortly.</p>
+          <a class="btn btn-primary mt-2" href="/">Back to home</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+{% endblock %}
